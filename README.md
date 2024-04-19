@@ -114,6 +114,7 @@ Spaces and hyphens turned into `_`, and everything became lowercase. In case of 
 | `entity`             | `string`  | **required** | An entity_id within the `sensor` domain.   |
 | `show_completed`     | `integer` | `5`          | Number of completed tasks shown at the end of the list (0 to disable).   |
 | `show_header`        | `boolean` | `true`       | Show friendly name of the selected `sensor` in the card header.      |
+| `show_subtasks`      | `boolean` | `true`       | Show subtasks in the list of tasks |
 | `show_item_add`      | `boolean` | `true`       | Show text input element for adding new items to the list.        |
 | `show_item_close`    | `boolean` | `true`       | Show `close/complete` and `uncomplete` buttons.       |
 | `show_item_delete`   | `boolean` | `true`       | Show `delete` buttons.        |

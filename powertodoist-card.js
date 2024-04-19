@@ -915,6 +915,14 @@ class PowerTodoistCard extends LitElement {
 
         items = this.filterDates(items);
         
+        // filter items based on the show_subtasks cofiguration option
+        let show_subtasks = this.myConfig.show_subtasks || true;
+        if (!show_subtasks) {
+            items = items.filter(item => {
+                return !item.parent_id;
+            });
+        }
+
         // filter by section:
         let section_name2id = [];
         if (!this.myConfig.filter_section_id && this.myConfig.filter_section) {
