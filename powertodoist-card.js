@@ -960,6 +960,14 @@ class PowerTodoistCard extends LitElement {
             });
         }
 
+        // filter by id
+        let task_id = this.myConfig.filter_task_id || undefined;
+        if (task_id) {
+            items = items.filter(item => {
+                return item.id === task_id || item.parent_id === task_id;
+            });
+        }
+
     // Starts with named section or default, tries to get section name from id, but lets friendly_name override it:
     let cardName = this.config.filter_section || "ToDoist";
     try { cardName = state.attributes.sections.find(s => { return s.id === section_id }).name } catch (error) { }       
