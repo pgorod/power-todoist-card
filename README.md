@@ -114,6 +114,7 @@ Spaces and hyphens turned into `_`, and everything became lowercase. In case of 
 | `entity`             | `string`  | **required** | An entity_id within the `sensor` domain.   |
 | `show_completed`     | `integer` | `5`          | Number of completed tasks shown at the end of the list (0 to disable).   |
 | `show_header`        | `boolean` | `true`       | Show friendly name of the selected `sensor` in the card header.      |
+| `show_subtasks`      | `boolean` | `true`       | Show subtasks in the list of tasks |
 | `show_item_add`      | `boolean` | `true`       | Show text input element for adding new items to the list.        |
 | `show_item_close`    | `boolean` | `true`       | Show `close/complete` and `uncomplete` buttons.       |
 | `show_item_delete`   | `boolean` | `true`       | Show `delete` buttons.        |
@@ -127,6 +128,7 @@ Spaces and hyphens turned into `_`, and everything became lowercase. In case of 
 | `filter_section_id` | `integer` | `(none)`      | Only show tasks from one Todoist section, identified by its id.    |
 | `filter_section` | `string` | `(none)`      | Only show tasks from one Todoist section, identified by its name.  |
 | `filter_labels` | `list` | `(none)`      | Only show tasks with the specified Todoist labels. See **Filtering by Labels** below for details on this powerful option.    |
+| `filter_task_id` | `integer` | `(none)`      | Only show task and subtasks identified by its id.  |
 | `filter_show_dates_starting`<br>`filter_show_dates_ending` | `integer` or `string` | `(none)`      | Only show tasks with the specified dates window. See **Filtering by Dates** below for details.    |
 | `filter_show_dates_empty` | `boolean` | `true`      | Defines whether tasks without any specified date pass the filter or not. See **Filtering by Dates** below for details.    |
 
