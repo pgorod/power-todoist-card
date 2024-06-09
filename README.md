@@ -77,22 +77,22 @@ This card can be configured using Lovelace UI editor.
     👉 The REST command and the `label_colors` sensor are constant and need to be defined only once for each Todoist account used (I recommend using only one and handling any content separation with cleverly filtered projects, sections, and labels).
     
     👉 The Sensor definition, on the other hand, can be cloned to allow for different projects, just make sure you set a unique entity name, and set the appropriate `TODOIST_PROJECT_ID` for each one (see below).
-2. In that `configuration.yaml`, replace `TODOIST_PROJECT_ID` with ID of your selected Todoist project.
+3. In that `configuration.yaml`, replace `TODOIST_PROJECT_ID` with ID of your selected Todoist project.
     > You can get `TODOIST_PROJECT_ID` from project URL after logging in to your Todoist account in a browser. It usually looks like this:
           `https://todoist.com/app/project/**TODOIST_PROJECT_ID**` or `https://todoist.com/app/project/name_of_project-**TODOIST_PROJECT_ID**`
-3. Add this to `secrets.yaml`:
+4. Add this to `secrets.yaml`:
     ```yaml
     todoist_api_token: 'Bearer TODOIST_API_TOKEN'
     todoist_cmd_with_api_token: 'echo "{\"label_colors\":" $(curl -s https://api.todoist.com/rest/v2/labels -H "Accept: application/json" -H "Authorization: Bearer TODOIST_API_TOKEN") "}" '
     ```
-4. In that `secrets.yaml`, replace two instances of `TODOIST_API_TOKEN` with your private [API Token](https://todoist.com/prefs/integrations) (click `Developer` tab on that page).
-5. Reload configs or restart Home Assistant.
-6. In Lovelace UI, click 3 dots in top-right corner.
-7. Click _Edit Dashboard_.
-8. Click _Add Card_ button in the bottom right corner to add a new card.
-9. Find _Custom: PowerTodoist Card_ in the list.
-10. Choose `entity`.
-11. Now you should see the preview of the card!
+5. In that `secrets.yaml`, replace two instances of `TODOIST_API_TOKEN` with your private [API Token](https://todoist.com/prefs/integrations) (click `Developer` tab on that page).
+6. Reload configs or restart Home Assistant.
+7. In Lovelace UI, click 3 dots in top-right corner.
+8. Click _Edit Dashboard_.
+9. Click _Add Card_ button in the bottom right corner to add a new card.
+10. Find _Custom: PowerTodoist Card_ in the list.
+11. Choose `entity`.
+12. Now you should see the preview of the card!
 
 A basic example of using this card in YAML config could look like this:
 
@@ -105,6 +105,13 @@ use_quick_add: true
 ```
 Note that the `to_do_list` entity name is what Home Assistant created based on the `name: To-do List` you specified earlier in the sensor definition. 
 Spaces and hyphens turned into `_`, and everything became lowercase. In case of doubt search your entities in HASS for the correct name.
+
+   👉 NOTE: For those using the Todoist "Team Workspace" feature, which is a subscription based upgrade to the free Todoist features, the project ID for each team project is found in the `v2_id` field of both the `projects` and `items` attributes.  Thus, rather than addressing the `[''id'']` object, you'll need to enter `[''v2_id'']`.  Likewise, you'll also need to ensure that you add the correct project ID in the sensor's `project_id` parameter.
+
+   ```yaml
+      value_template: '{{ value_json[''project''][''id''] }}'    <<< Change this...
+      value_template: '{{ value_json[''project''][''v2_id''] }}'    <<< ...to this.
+   ```
 
 ### Configuration Options
 
