@@ -895,6 +895,19 @@ class PowerTodoistCard extends LitElement {
         */
     }
 
+    filterPriority(items) {
+            if ((typeof this.myConfig.sort_by_priority !== 'undefined') && (this.myConfig.sort_by_priority !== false)) {
+                items.sort((a, b) => {
+                    if (!(a.priority && b.priority)) return 0;
+                    if (this.myConfig.sort_by_priority === 'ascending')
+                        return a.priority - b.priority;
+                    else
+                        return b.priority - a.priority;
+                });
+            }
+            return items;        
+    }
+
     render() {
         this.myConfig = this.parseConfig(this.config);
         let state = this.hass.states[this.config.entity] || undefined;
@@ -914,6 +927,7 @@ class PowerTodoistCard extends LitElement {
         let items = state.attributes.items || [];
 
         items = this.filterDates(items);
+        items = this.filterPriority(items);
         
         // filter by section:
         let section_name2id = [];
