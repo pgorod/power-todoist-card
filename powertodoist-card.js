@@ -946,6 +946,38 @@ class PowerTodoistCard extends LitElement {
             });
         }
 
+        // filter by id
+        let task_id = this.myConfig.filter_task_id || undefined;
+        if (task_id) {
+            items = items.filter(item => {
+                return item.id === task_id || item.parent_id === task_id;
+            });
+        }
+
+        // filter items based on the show_subtasks
+        let show_subtasks = (this.config.show_subtasks === undefined) || (this.config.show_subtasks !== false);
+        if (!show_subtasks) {
+            items = items.filter(item => {
+                return !item.parent_id;
+            });
+        } else {
+            // add parent label to the subtasks
+            let task_id2content = [];
+            items.forEach(function(part, index) {
+                let item = this[index];
+                // parent task is in the list every time before subtask
+                task_id2content[item.id] = item.content;
+                if(item.parent_id) {
+                    let parentLabel = "Parent task: ".concat(task_id2content[item.parent_id]);
+                    if(item.labels.indexOf(parentLabel) === -1) {
+                        item.labels.push(parentLabel);
+                        this[index] = item;
+                    }
+                }
+              }, items);
+        }
+
+
         // filter by label:
         var includes, excludes;
         var cardLabels=[];
