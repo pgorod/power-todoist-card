@@ -462,6 +462,9 @@ class PowerTodoistCard extends LitElement {
         myStrConfig = replaceMultiple(myStrConfig, mapReplaces);
         try {
              parsedConfig = JSON.parse(myStrConfig);
+	     if (!parsedConfig.hasOwnProperty('sort_by_label')) {
+            	parsedConfig.sort_by_label = undefined;   // default: off
+             }
         } catch(err) {
             var source = "";
             parsedConfig = JSON.parse(JSON.stringify(srcConfig)); // cloning prevents preventExtensions from limiting us
@@ -897,6 +900,25 @@ class PowerTodoistCard extends LitElement {
         */
     }
 
+
+	sortByLabel(items) {
+	  if (!this.myConfig.sort_by_label || this.myConfig.sort_by_label === "false") return items;        // feature off or explicitly "false"
+
+	  const dir = this.myConfig.sort_by_label === 'descending' ? -1 : 1;
+
+	  items.sort((a, b) => {
+	    const la = (a.labels && a.labels.length ? a.labels[0] : '').toLowerCase();
+	    const lb = (b.labels && b.labels.length ? b.labels[0] : '').toLowerCase();
+	    if (la < lb) return -1 * dir;
+	    if (la > lb) return 1 * dir;
+	    return 0;                                           // tie
+	  });
+
+	  return items;
+	}
+
+
+
     filterPriority(items) {
             if ((typeof this.myConfig.sort_by_priority !== 'undefined') && (this.myConfig.sort_by_priority !== false)) {
                 items.sort((a, b) => {
@@ -930,6 +952,7 @@ class PowerTodoistCard extends LitElement {
 
         items = this.filterDates(items);
         items = this.filterPriority(items);
+	items = this.sortByLabel(items);
         
         // filter by section:
         let section_name2id = [];
