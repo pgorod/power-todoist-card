@@ -1049,10 +1049,12 @@ class PowerTodoistCard extends LitElement {
                                         @dblclick=${() => this.itemAction(item, "dbl_description")}   
                                     ><span class="powertodoist-item-description">${item.description}</span></div>`
                                     : html`` }
-                                ${this.renderLabels(item, 
-                                    // labels:
-                                    [this.myConfig.show_dates && item.due ? dateFormat(item.due.date, "🗓 dd-mmm H'h'MM") : 
-                                    [], ...item.labels].filter(String), // filter removes the empty []s
+                                ${this.renderLabels(
+                                    item, 
+                                    this.myConfig.show_dates && item.due ? dateFormat(item.due.date, "🗓 dd-mmm H'h'MM") : [],
+                                    [...item.labels].filter(String),
+//                                    [this.myConfig.show_dates && item.due ? dateFormat(item.due.date, "🗓 dd-mmm H'h'MM") : 
+//                                    [], ...item.labels].filter(String), // filter removes the empty []s
                                     // exclusions:
                                     [...(cardLabels.length == 1 ? cardLabels : []), // card labels excluded unless more than one
                                     ...item.labels.filter(l => l.startsWith("_"))], // "_etc" labels excluded
@@ -1079,7 +1081,7 @@ class PowerTodoistCard extends LitElement {
         return rendered; // + renderedCSS;
     }
     
-    renderLabels(item, labels, exclusions, label_colors) {
+    renderLabels(item, dates, labels, exclusions, label_colors) {
         /////////////////////////
         var extraLabels = [];
         if (this.myConfig.extra_labels) {
@@ -1125,7 +1127,7 @@ class PowerTodoistCard extends LitElement {
 
 
         if ((item !== undefined) && (this.config.show_item_labels === false)) {
-            labels = this.myConfig.show_dates && item.due ? [labels[0], ...extraLabels] : [...extraLabels];
+            labels = this.myConfig.show_dates && item.due ? [dates, ...extraLabels] : [...extraLabels];
         }        
         
 
@@ -1137,11 +1139,11 @@ class PowerTodoistCard extends LitElement {
                 let displayLabel = isOutline ? label.slice(0, -8) : label; // "_outline" is 8 chars
                 let colorKey = label_colors.filter(lc => lc.name === label).length
                     ? label_colors.filter(lc => lc.name === label)[0].color
-                    : "black";
+                    : "var(--primary-background-color)";
                 let color = todoistColors[colorKey] || colorKey;
                 let style = isOutline
                     ? `border: 2px solid ${color}; background: transparent; color: ${color};`
-                    : `background-color: ${color};`;
+                    : `background-color: ${color}; ${label[0]=="\ud83d" ? "color: var(--primary-text-color);" : ""}`; // \ud83d is "🗓" that marks a date
                 return html`<li 
                     .style=${style}
                     @click=${() => this.itemAction(item, "label")}
@@ -1324,7 +1326,7 @@ class PowerTodoistCard extends LitElement {
                 font-weight: normal;
                 white-space: nowrap;
                 padding: 0px 3px;
-                color: white;
+                color: var(--ha-color-text-primary:);
                 vertical-align: top;
                 float: left;
             }
