@@ -462,10 +462,14 @@ class PowerTodoistCard extends LitElement {
             "%date%"          : `${date_formatted}`,
             "%str_labels%"    : strLabels,
         };
-        project_notes.forEach(function (value, index) {
+        if (Array.isArray(project_notes) && project_notes.length > 0) {
+            project_notes.forEach(function (value, index) {
             mapReplaces["%project_notes_" + index + '%'] = value.content;
-            if (index==0) mapReplaces["%project_notes%"] = value.content;
-        });
+            if (index == 0) mapReplaces["%project_notes%"] = value.content;
+            });
+        } else {
+            mapReplaces["%project_notes%"] = "";
+        }
 
         if (this.hass && this.hass.states['sensor.dow']) {
             //var daze={};
@@ -1100,12 +1104,18 @@ class PowerTodoistCard extends LitElement {
                 }
 
                 if (filteredParts.length > 0) {
-                    let finalLabel = firstPart + ": " + filteredParts.join("+");
+                    let outlineLabel = label_colors.filter(lc => lc.name === firstPart + '_outline');
+
+                    let theColor = (label_colors.find(lc => lc.name === firstPart)?.color || "light_blue");
+                    if (outlineLabel.length > 0) {
+                        // strip "_outline" which has 8 chars, we'll then re-add it to the end
+                        theColor = outlineLabel[0].color;//.slice(0, -8); 
+                    }
+                    let finalLabel = firstPart + ": " + filteredParts.join("+") + (outlineLabel.length > 0 ? '_outline' : ''); 
+
                     extraLabels.push(finalLabel);
 
-                    if (!label_colors.some(lc => lc.name === finalLabel)) {
-                        label_colors.push({ name: finalLabel, color: "light_blue" });
-                    }
+                    label_colors.push({ name: finalLabel, color: theColor });
                 }
             });
 
@@ -1121,19 +1131,25 @@ class PowerTodoistCard extends LitElement {
 
         let rendered = html`
             ${(labels.length - exclusions.length > 0) 
-                ? html`<div class="labelsDiv"><ul class="labels">${labels.map( label => 
-                    !exclusions.includes(label)  ? html`<li 
-                        .style=${'background-color: ' + 
-                        todoistColors[
-                            label_colors.filter(lc=>{ return lc.name===label }).length 
-                            ? label_colors.filter(lc=>{ return lc.name===label })[0].color 
-                            : "black" ]}
-                        @click=${() => this.itemAction(item, "label")}
-                        @dblclick=${() => this.itemAction(item, "dbl_label")}
-                        ><span>${label}</span></li>`
-                    : html``)
-                    }</ul></div>` 
-                : html`` }
+            ? html`<div class="labelsDiv"><ul class="labels">${labels.map(label => {
+                if (exclusions.includes(label)) return html``;
+                let isOutline = label.endsWith('_outline');
+                let displayLabel = isOutline ? label.slice(0, -8) : label; // "_outline" is 8 chars
+                let colorKey = label_colors.filter(lc => lc.name === label).length
+                    ? label_colors.filter(lc => lc.name === label)[0].color
+                    : "black";
+                let color = todoistColors[colorKey] || colorKey;
+                let style = isOutline
+                    ? `border: 2px solid ${color}; background: transparent; color: ${color};`
+                    : `background-color: ${color};`;
+                return html`<li 
+                    .style=${style}
+                    @click=${() => this.itemAction(item, "label")}
+                    @dblclick=${() => this.itemAction(item, "dbl_label")}
+                    >
+                    <span>${displayLabel}</span></li>`;
+            })}</ul></div>` 
+            : html`` }
         `;
         return rendered;
     }
