@@ -138,7 +138,7 @@ Spaces and hyphens turned into `_`, and everything became lowercase. In case of 
 
 Labels are colorful and beautiful. And useful! Define them in Todoist app, and don't forget to pick your favorite colors there - after some time, they will be picked up by PowerTodoist-card!
 
-If you have a label called `abc`, for example, you can define an additional label called `abc_outline` is found in Todoist labels, then this other label color will be used (without displaying the `_outline` part) and the visuals will be different: a colored border will be shown, instead of a solid fill.
+If you have a label in Todoist called `abc_outline`, then this label color will be used to display as `abc` (without displaying the `_outline` part) and the visuals will be different: a colored border will be shown, instead of a solid fill. Those `_outline` suffixes will look ugly in Todoist but this adds possibilities when seen from the card.
 
 #### Filtering by Labels
 
@@ -305,4 +305,5 @@ That was a lot of work 😅! If you enjoy and use this card, I'd appreciate it i
 [![](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/pgorod)
 
 Note that you pick a one-time amount and select any value you want.
+
 
