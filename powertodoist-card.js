@@ -471,11 +471,10 @@ class PowerTodoistCard extends LitElement {
             mapReplaces["%project_notes%"] = "";
         }
 
-        if (this.hass && this.hass.states['sensor.dow']) {
-            //var daze={};
+        if (this.hass && this.hass.states['sensor.dow'] && this.hass.states['sensor.dow']?.state) {
             var dazeString = this.hass.states['sensor.dow'].state.split(', '); 
             [0,1,2,3,4,5,6].forEach(function(index) { 
-                mapReplaces['%dow' + (index-1) + '%'] = dazeString[index].replaceAll("'",""); 
+                mapReplaces['%dow' + (index-1) + '%'] = dazeString[index]?.replaceAll("'","") || ""; 
             });
         }
 
@@ -518,7 +517,9 @@ class PowerTodoistCard extends LitElement {
         try { emphasis     = actions.find(a => typeof a === 'object' && a.hasOwnProperty('emphasis')).emphasis || [];} catch (error) { }       
         try { paint        = actions.find(a => typeof a === 'object' && a.hasOwnProperty('paint')).paint || [];} catch (error) { }       
 
-        const strLabels =  JSON.stringify(item.labels); // moved to Parse, delete when not needed
+        //const strLabels =  JSON.stringify(item.labels); // moved to Parse, delete when not needed
+
+        let initialLabels = [...item.labels];
         let labels = item.labels;
         if (labelChanges.includes("!*")) labels = []; // use !* to clear all    
         if (labelChanges.includes("!_")) labels =     // use !_ to clear all labels starting with _   
@@ -528,18 +529,23 @@ class PowerTodoistCard extends LitElement {
         labelChanges.map(change => {
             let newLabel = replaceMultiple(change, {"%user%":this.hass.user.name});
             if (change.startsWith("!")) {  // remove specific label
-                if (labels.includes(change.slice(1))) 
-                   labels = labels.filter(e => e !== change.slice(1)); // remove it
+            if (labels.includes(change.slice(1))) 
+               labels = labels.filter(e => e !== change.slice(1)); // remove it
             } else if (change.startsWith(":")) { // Toggle specific label
-                if (labels.includes(change.slice(1))) 
-                    labels = labels.filter(e => e !== change.slice(1)); // toggle removes it
-                else 
-                    if (!labels.includes(newLabel)) labels.push(newLabel.slice(1));  // toggle adds it
+            if (labels.includes(change.slice(1))) 
+                labels = labels.filter(e => e !== change.slice(1)); // toggle removes it
+            else 
+                if (!labels.includes(newLabel)) labels.push(newLabel.slice(1));  // toggle adds it
             } else {
-                if (!labels.includes(newLabel)) labels.push(newLabel); // (simple) add it
+            if (!labels.includes(newLabel)) labels.push(newLabel); // (simple) add it
             }
         });
-  
+
+        // Set labelsBeingAdded and labelsBeingRemoved by comparing initialLabels and labels
+        let labelsBeingAdded = labels.filter(l => !initialLabels.includes(l));
+        let labelsBeingRemoved = initialLabels.filter(l => !labels.includes(l));
+        this.changeLabelsUINow(item, labelsBeingAdded, labelsBeingRemoved);
+
         // Let's make things really easy to use further down:
         let section_id2order = {}; // Object, not array - we store section_ids as strings
         section_id2order[""] = 0; // not really a section in Todoist, but when incremented, will move to first section
@@ -547,8 +553,6 @@ class PowerTodoistCard extends LitElement {
         state.sections.map(s => {
             section_id2order[s.id.toString()] = s.section_order;
             section_order2id[s.section_order] = s.id;
-            //section_id2name[s.id.toString()] = s.name;
-            //section_name2id[s.name] = s.id;
         });
         let nextSection = section_order2id[section_id2order[item.section_id] + 1] || item.project_id;
 
@@ -571,12 +575,12 @@ class PowerTodoistCard extends LitElement {
                 input = window.prompt(questionText, defaultText) || "";
         }
 
-        let date_formatted2 = (new Date()).format(this.myConfig["date_format"] || "mmm dd H:mm"); // moved to Parse, delete when not needed
-        var mapReplaces = {    // OLD OLD OLD
-            "%user%": this.hass.user.name,
-            "%date%": `${date_formatted2}`,
-            "%str_labels%" : strLabels,
-        };
+        //let date_formatted2 = (new Date()).format(this.myConfig["date_format"] || "mmm dd H:mm"); // moved to Parse, delete when not needed
+        //var mapReplaces = {    // OLD OLD OLD
+        //    "%user%": this.hass.user.name,
+        //    "%date%": `${date_formatted2}`,
+        //    "%str_labels%" : strLabels,
+        //};
 
         if (updates.length || labelChanges.length) {
             let newIndex = commands.push({
@@ -600,16 +604,11 @@ class PowerTodoistCard extends LitElement {
                     }
             });
         }
-
-
-
         
         if (emphasis.length) {
             this.emphasizeItem(item, emphasis);
             //this.itemsEmphasized[item.id]="special";
         }
-
-
 
         if (actions.includes("move")) {
             let newIndex = commands.push({
@@ -657,13 +656,65 @@ class PowerTodoistCard extends LitElement {
             return [ [] , [] , "", "" ];
         }
 
+        // 'match' actions [field, value, action_domystuff] call other actions conditionally:
         matches.forEach(([field, value, subActions]) => {
             if ((Array.isArray(item[field]) && item[field].includes(value)) ||
                 item[field] == value)
-            this.itemAction(item, subActions);
+              // we have a match, action is executed like a sub-routine:
+              this.itemAction(item, subActions);
         })
 
         return [commands, adds, automation, toast];
+    }
+
+    changeLabelsUINow(item, labelsBeingAdded, labelsBeingRemoved) {
+        if (!labelsBeingAdded?.length && !labelsBeingRemoved?.length) return;
+
+        // Fetch item from hass state
+        let state = this.hass.states[this.config.entity] || undefined;
+        let items = state?.attributes?.items || [];
+        const itemIndex = items.findIndex(i => i.id === item.id);
+        if (itemIndex === -1) return;
+        let currentLabels = items[itemIndex].labels || [];
+
+        // Remove specified labels
+        currentLabels = currentLabels.filter(label => !labelsBeingRemoved.includes(label));
+
+         // Add specified labels, avoiding duplicates
+        currentLabels = [...new Set([...currentLabels, ...labelsBeingAdded])];
+
+        // Update the item in the items array
+        items = [
+            ...items.slice(0, itemIndex),
+            { ...items[itemIndex], labels: currentLabels },
+            ...items.slice(itemIndex + 1),
+        ];
+
+        if (true) { // some extra logging for debugging 
+            const sectionIdMap = {
+                '138899413': 'Monday',
+                '138899729': 'Tuesday?',
+                '138899730': 'Wednesday?',
+                '138899731': 'Thursday?',
+                '138899732': 'Friday?',
+                '138899735': 'Saturday',
+                '138899732': 'Sunday?',
+            };
+            const filterSectionIds = ['138899413']; //focus debugging on a single day
+            const briefItems = items
+                .filter(item => filterSectionIds.includes(String(item.section_id)))
+                .map(({ content, labels, section_id, statusFromLabelCriteria }) => ({
+                    content,
+                    labels: labels || [],
+                    section_id: sectionIdMap[String(section_id)] || String(section_id) || 'Unknown',
+                    status: statusFromLabelCriteria || '---'
+                }));
+            console.table(briefItems); 
+        }
+
+        // Trigger re-render
+        this.items = items;
+        //this.requestUpdate();
     }
 
     async showToast(message, duration, defer = 0) {
@@ -694,22 +745,6 @@ class PowerTodoistCard extends LitElement {
         }
     }
 
-    async clearSpecialCSSNOTNOTNOT(duration) {
-    // this.hass.states[this.config.entity].last_updated 
-        //var element = this.shadowRoot.querySelector(".powertodoist-item-content");
-        
-        var specials=this.shadowRoot.querySelectorAll(".powertodoist-special");
-        specials.forEach(s => {
-            setTimeout(() => {
-                s.classList.remove("powertodoist-special");
-                //s.innerText = 'cleared';
-                // clear up all items
-                this.itemsEmphasized = [];    
-            }, duration);
-        }); 
-    }
-
-
     async processAdds(adds) {
         for (const item of adds) {
             this.hass.callService('rest_command', 'todoist', {
@@ -719,6 +754,8 @@ class PowerTodoistCard extends LitElement {
         }
     }
 
+    // Usually this is triggered by UI event handlers: click, dbl_click, etc
+    // But also via 'match' actions
     itemAction(item, action) {
         //var myConfig = this.parseConfig(this.config);
 
@@ -726,8 +763,11 @@ class PowerTodoistCard extends LitElement {
         action = action.toLowerCase();
         let commands = [], adds = [], automation = [];
         let toast = "";
+
+        // start by getting everything from config:
         [commands, adds, automation, toast] = this.buildCommands(item, "actions_" + action);
-        //this.showToast(toast ? toast : action, 3000);
+
+        // show toast if it exists:
         this.showToast(toast, 3000);
 
         // deal with adds (this runs asynchronously to avoid blocking us)
@@ -760,8 +800,9 @@ class PowerTodoistCard extends LitElement {
 
                     default:
                   }
-                if (action === "close") {
-                } 
+
+                // note that this may execute _after_ itemAction() ends, because it runs async upon getting an API response
+                this.hass.callService('homeassistant', 'update_entity', { entity_id: this.config.entity, });
             });
 
         // deal with automations:    
@@ -772,39 +813,13 @@ class PowerTodoistCard extends LitElement {
                 { entity_id: automation, }
             ).then(function() {
                 console.log('Automation triggered successfully from todoist JS!');
+                this.hass.callService('homeassistant', 'update_entity', { entity_id: this.config.entity, });
             }).catch(function(error) {
                 console.error('Error triggering automation from todoist JS:', error);
             });
         }        
-        this.hass.callService('homeassistant', 'update_entity', {
-            entity_id: this.config.entity,
-        });
     }
-
-    itemUncompleteNOT(item) {
-        let commands = [{
-            'type': 'item_uncomplete',
-            'uuid': this.getUUID(),
-            'args': {
-                'id': item.id,
-            },
-        }];
-        
-        this.hass
-            .callService('rest_command', 'todoist', {
-                url: 'sync',
-                payload: 'commands=' + JSON.stringify(commands),
-            })
-            .then(response => {
-                this.itemUnlistCompleted(item);
-
-                // this.hass.callService('homeassistant', 'update_entity', {
-                //     entity_id: this.config.entity,
-                // });
-            });
-    }
-    
-
+   
     itemUnlistCompleted(item) {
         this.itemsJustCompleted = this.itemsJustCompleted.filter(v => {
             return v.id != item.id;
@@ -898,31 +913,6 @@ class PowerTodoistCard extends LitElement {
         }
 
         return items;
-
-        /*
-        if (this.myConfig.filter_today_overdue) { // tasks start showing on day when due, end showing never
-            items = items.filter(item => {        
-                if (!item.due) return false;
-                item.due.date += /^\d{4}-\d{2}-\d{2}$/.test(item.due.date) ? 'T00:00:00' : '' // adds time if missing
-                return (new Date()).setHours(23, 59, 59, 999) >= (new Date(item.due.date)).getTime();                
-            });
-        }
-
-        var dNowPlus;
-        if ((typeof this.myConfig.filter_due_days_out !== 'undefined') && this.myConfig.filter_due_days_out !== -1) {
-            // tasks start showing n days before due, end showing never
-            const days_out = this.myConfig.filter_due_days_out;
-            dNowPlus = days_out == 0 ? 
-                        new Date() + (days_out * 24 * 60 * 60 * 1000) :
-                        new Date().setHours(23, 59, 59, 999) + (days_out * 24 * 60 * 60 * 1000);
-            items = items.filter(item => {
-                if (!item.due) return false;
-                item.due.date += /^\d{4}-\d{2}-\d{2}$/.test(item.due.date) ? 'T00:00:00' : '' // adds time if missing
-                dItem = (new Date(item.due.date)).getTime();
-                return dNowPlus >= dItem;
-            });
-        }
-        */
     }
 
     filterPriority(items) {
@@ -938,21 +928,52 @@ class PowerTodoistCard extends LitElement {
         return items;        
     }
 
+    assessLabelCriteriaForItem(item, criteria, defaultIfNoCriteria, cardLabels) {
+        if (!criteria) return defaultIfNoCriteria;
+
+        let includes = 0;
+        let excludes = 0;
+
+        criteria.forEach(label => {
+            let l = label;
+            if (l.startsWith("!")) {
+                excludes += item.labels.includes(l.slice(1));
+            } else {
+                includes += item.labels.includes(l) || (l === "*");
+                includes += (l === "!*") && (item.labels.length === 0);
+                if (!cardLabels?.includes(l)) cardLabels.push(l);
+            }
+        });
+
+        return (excludes === 0) && (includes > 0);
+    }
+
+    getIconName(icons, baseIndex, item) {
+        if ((this.config.status_from_labels === undefined) || (item.statusFromLabelCriteria === undefined) || icons.length < 5)
+            return icons[baseIndex];
+
+        return item.statusFromLabelCriteria ? icons[4] : icons[5];
+    }
+
     render() {
         this.myConfig = this.parseConfig(this.config);
         let state = this.hass.states[this.config.entity] || undefined;
-        if (!state) {
-           throw new Error("thrown by pgr: state undefined in render");
+        if (!state || !state?.attributes) {
+            return html`Todoist sensor doesn't have any data yet. Please wait a few seconds and refresh.`;
         }
-        var label_colors = this.hass.states["sensor.label_colors"] || undefined; 
-        if (!state || !label_colors) {
-            return html`Sensors don't have any data yet. Please wait a few seconds and refresh.`;
+        var label_colors = this.hass.states["sensor.label_colors"]; 
+        label_colors = label_colors?.attributes?.label_colors;
+        if (!label_colors) {
+            return html`Sensor label_colors doesn't have any data yet. Please wait a few seconds and refresh.`;
         }
-        label_colors = label_colors.attributes.label_colors;
+        if (!this.hass.states["sensor.dow"] || this.hass.states['sensor.dow']?.state?.length < 2) { // when not set, is [ "unknown" ]
+            return html`Sensor for days of week doesn't have any data yet. Please wait a few seconds and refresh.`;
+        }
 
-        var icons = ((typeof this.config.icons !== 'undefined') && (this.config.icons.length == 4)) 
+        var icons = ((typeof this.config.icons !== 'undefined') && (this.config.icons.length >= 4)) 
             ? this.config.icons 
-            : ["checkbox-marked-circle-outline", "circle-medium", "plus-outline", "trash-can-outline"]; 
+            : ["checkbox-marked-circle-outline", "circle-medium", "plus-outline", "trash-can-outline",
+               "checkbox-marked-circle-outline", "checkbox-blank-circle-outline"]; 
         
         let items = state.attributes.items || [];
 
@@ -974,116 +995,102 @@ class PowerTodoistCard extends LitElement {
             });
         }
 
-        // filter by label:
-        var includes, excludes;
-        var cardLabels=[];
-        if (this.myConfig.filter_labels) {
-            items = items.filter(item => {
-                includes = excludes = 0;
-                this.myConfig.filter_labels.forEach(label => {
-                    let l = label; 
-                    if (l.startsWith("!")) {
-                        excludes += item.labels.includes(l.slice(1));
-                    } else {
-                        includes += item.labels.includes(l) || (l === "*");
-                        includes += (l === "!*") && (item.labels.length === 0);
-                        if (!cardLabels.includes(l)) cardLabels.push(l);
-                    }
-                });
-                return (excludes == 0) && (includes > 0);
-            });
-        }
+        // filter items matching filter_labels criteria
+        var cardLabels = [];
+        items = items.filter(item => this.assessLabelCriteriaForItem.call(this, item, this.myConfig?.filter_labels, true, cardLabels));
         
 
+        // mark items matching status_from_labels criteria by storing it as an extra item property
+        items = items.map(item => ({
+            ...item,
+            statusFromLabelCriteria: this.assessLabelCriteriaForItem.call(this, item, this.myConfig?.status_from_labels, false, [])
+        }));
 
-    // Starts with named section or default, tries to get section name from id, but lets friendly_name override it:
-    let cardName = this.config.filter_section || "ToDoist";
-    try { cardName = state.attributes.sections.find(s => { return s.id === section_id }).name } catch (error) { }       
-    cardName = this.config.friendly_name || cardName;
+        // Starts with named section or default, tries to get section name from id, but lets friendly_name override it:
+        let cardName = this.config.filter_section || "ToDoist";
+        try { cardName = state.attributes.sections.find(s => { return s.id === section_id }).name } catch (error) { }       
+        cardName = this.config.friendly_name || cardName;
 
-    var style = document.createElement( 'style' );
-    style.id = 'customPowerTodoistStyle';
-    try { this.shadowRoot.getElementById(style.id).remove(); } catch (error) { }       
-    if (this.config.style) {
-       style.innerHTML = this.config.style || '';
-       this.shadowRoot.appendChild(style);
-    }
+        var style = document.createElement( 'style' );
+        style.id = 'customPowerTodoistStyle';
+        try { this.shadowRoot.getElementById(style.id).remove(); } catch (error) { }       
+        if (this.config.style) {
+            style.innerHTML = this.config.style || '';
+            this.shadowRoot.appendChild(style);
+        }
 
-// https://lit.dev/docs/v1/lit-html/writing-templates/#repeating-templates-with-looping-statements
+        // https://lit.dev/docs/v1/lit-html/writing-templates/#repeating-templates-with-looping-statements
 
-    //this.clearSpecialCSS(2000);
-
-    let rendered = html`<ha-card>
-        ${(this.config.show_header === undefined) || (this.config.show_header !== false)
-            ? html`<h1 class="card-header">
-                <div class="name">${cardName}
-                ${(this.config.show_card_labels === undefined) || (this.config.show_card_labels !== false)
-                    ? html`${this.renderLabels(undefined, (cardLabels.length == 1 ? cardLabels : []), [], label_colors)}`
-                    : html``
-                }
-                </div>
-                </h1>
-                <div id="powertodoist-toast">${this.toastText}</div>`
-            : html``}
-        <div class="powertodoist-list">
-            ${items.length
-                ? items.map(item => {
-                    return html`<div class="powertodoist-item" .id=${"item_" + item.id}>
-                        ${(this.config.show_item_close === undefined) || (this.config.show_item_close !== false)
-                            ? html`<ha-icon-button
-                                class="powertodoist-item-close"
-                                @click=${() => this.itemAction(item, "close")} 
-                                @dblclick=${() => this.itemAction(item, "dbl_close")} >
-                                <ha-icon .icon=${"mdi:" + icons[0]}></ha-icon>
-                            </ha-icon-button>`
-                            : html`<ha-icon .icon=${"mdi:" + icons[1]}></ha-icon>` }
+        let rendered = html`<ha-card>
+            ${(this.config.show_header === undefined) || (this.config.show_header !== false)
+                ? html`<h1 class="card-header">
+                    <div class="name">${cardName}
+                    ${(this.config.show_card_labels === undefined) || (this.config.show_card_labels !== false)
+                        ? html`${this.renderLabels(undefined, (cardLabels.length == 1 ? cardLabels : []), [], label_colors)}`
+                        : html``
+                    }
+                    </div>
+                    </h1>
+                    <div id="powertodoist-toast">${this.toastText}</div>`
+                : html``}
+            <div class="powertodoist-list">
+                ${items.length
+                    ? items.map(item => {
+                        return html`<div class="powertodoist-item" .id=${"item_" + item.id}>
+                            ${(this.config.show_item_close === undefined) || (this.config.show_item_close !== false)
+                                ? html`<ha-icon-button
+                                    class="powertodoist-item-close"
+                                    @click=${() => this.itemAction(item, "close")} 
+                                    @dblclick=${() => this.itemAction(item, "dbl_close")} >
+                                    <ha-icon .icon=${"mdi:" + this.getIconName(icons, 0, item)}></ha-icon>
+                                </ha-icon-button>`
+                                : html`<ha-icon .icon=${"mdi:" + icons[1]}></ha-icon>` 
+                            }
                             <div class="powertodoist-item-text"><div 
-                                    @click=${() => this.itemAction(item, "content")} 
-                                    @dblclick=${() => this.itemAction(item, "dbl_content")}
-                            >
-                                <span class="powertodoist-item-content ${(this.itemsEmphasized[item.id]) ? css`powertodoist-special` : css``}" >
-                                ${item.content}</span></div>
-                                ${item.description
-                                    ? html`<div
-                                        @click=${() => this.itemAction(item, "description")} 
-                                        @dblclick=${() => this.itemAction(item, "dbl_description")}   
-                                    ><span class="powertodoist-item-description">${item.description}</span></div>`
-                                    : html`` }
-                                ${this.renderLabels(
-                                    item, 
-                                    this.myConfig.show_dates && item.due ? dateFormat(item.due.date, "🗓 dd-mmm H'h'MM") : [],
-                                    [...item.labels].filter(String),
+                                @click=${() => this.itemAction(item, "content")} 
+                                @dblclick=${() => this.itemAction(item, "dbl_content")}
+                            ><span class="powertodoist-item-content ${(this.itemsEmphasized[item.id]) ? css`powertodoist-special` : css``}" >
+                            ${item.content}</span></div>
+                            ${(this.config.show_item_description === undefined) || (this.config.show_item_description !== false) && item.description
+                                ? html`<div
+                                    @click=${() => this.itemAction(item, "description")} 
+                                    @dblclick=${() => this.itemAction(item, "dbl_description")}   
+                                ><span class="powertodoist-item-description">${item.description}</span></div>`
+                                : html`` }
+                            ${this.renderLabels(
+                                item, 
+                                this.myConfig.show_dates && item.due ? dateFormat(item.due.date, "🗓 dd-mmm H'h'MM") : [],
+                                [...item.labels].filter(String),
 //                                    [this.myConfig.show_dates && item.due ? dateFormat(item.due.date, "🗓 dd-mmm H'h'MM") : 
 //                                    [], ...item.labels].filter(String), // filter removes the empty []s
-                                    // exclusions:
-                                    [...(cardLabels.length == 1 ? cardLabels : []), // card labels excluded unless more than one
-                                    ...item.labels.filter(l => l.startsWith("_"))], // "_etc" labels excluded
-                                    label_colors) }
-                            </div>
-                            ${(this.config.show_item_delete === undefined) || (this.config.show_item_delete !== false)
-                                ? html`<ha-icon-button
-                                    class="powertodoist-item-delete"
-                                    @click=${() => this.itemAction(item, "delete")} 
-                                    @dblclick=${() => this.itemAction(item, "dbl_delete")} >
-                                    <ha-icon .icon=${"mdi:" + icons[3]}></ha-icon>
-                                </ha-icon-button>`
-                                : html``}    
+                                // exclusions:
+                                [...(cardLabels.length == 1 ? cardLabels : []), // card labels excluded unless more than one
+                                ...item.labels.filter(l => l.startsWith("_"))], // "_etc" labels excluded
+                                label_colors) }
+                        </div>
+                        ${(this.config.show_item_delete === undefined) || (this.config.show_item_delete !== false)
+                            ? html`<ha-icon-button
+                                class="powertodoist-item-delete"
+                                @click=${() => this.itemAction(item, "delete")} 
+                                @dblclick=${() => this.itemAction(item, "dbl_delete")} >
+                                <ha-icon .icon=${"mdi:" + icons[3]}></ha-icon>
+                            </ha-icon-button>`
+                            : html``}    
                         </div>
                     </div>`;
-                })
-                : html`<div class="powertodoist-list-empty">No uncompleted tasks!</div>`}
-            ${this.renderLowerPart(icons)}
-        </div>
-        ${this.renderFooter()}
-        </ha-card>`;
+                    })
+                    : html`<div class="powertodoist-list-empty">No uncompleted tasks!</div>`}
+                ${this.renderLowerPart(icons)}
+            </div>
+            ${this.renderFooter()}
+            </ha-card>`;
 
-        //let renderedCSS = css`${unsafeCSS(style)}`;
-        return rendered; // + renderedCSS;
+        return rendered;
     }
     
-    renderLabels(item, dates, labels, exclusions, label_colors) {
-        /////////////////////////
+    generateExtraLabels (labels, label_colors) {
         var extraLabels = [];
+
         if (this.myConfig.extra_labels) {
             this.myConfig.extra_labels.forEach(label => {
                 let l = label;
@@ -1120,31 +1127,37 @@ class PowerTodoistCard extends LitElement {
                     label_colors.push({ name: finalLabel, color: theColor });
                 }
             });
-
-            labels = labels.concat(extraLabels);
         }
+        return extraLabels;
+    }
 
+    renderLabels(item, dates, labels, exclusions, label_colors) {
 
+        var extraLabels = this.generateExtraLabels(labels, label_colors);
 
+        labels = labels.concat(extraLabels);
+
+        // prepend a date as a "fake" label:
         if ((item !== undefined) && (this.config.show_item_labels === false)) {
             labels = this.myConfig.show_dates && item.due ? [dates, ...extraLabels] : [...extraLabels];
         }        
         
-
         let rendered = html`
-            ${(labels.length - exclusions.length > 0) 
+            ${(labels.length - (exclusions?.length ?? 0) > 0) 
             ? html`<div class="labelsDiv"><ul class="labels">${labels.map(label => {
                 if (exclusions.includes(label)) return html``;
                 let isOutline = label.endsWith('_outline');
                 let displayLabel = isOutline ? label.slice(0, -8) : label; // "_outline" is 8 chars
-                let colorKey = label_colors.filter(lc => lc.name === label).length
-                    ? label_colors.filter(lc => lc.name === label)[0].color
+                let filteredColors = label_colors.filter(lc => lc.name === label);
+                let colorKey = filteredColors.length
+                    ? filteredColors[0].color
                     : "var(--primary-background-color)";
                 let color = todoistColors[colorKey] || colorKey;
                 let style = isOutline
                     ? `border: 2px solid ${color}; background: transparent; color: ${color};`
                     : `background-color: ${color}; ${label[0]=="\ud83d" ? "color: var(--primary-text-color);" : ""}`; // \ud83d is "🗓" that marks a date
                 return html`<li 
+                    class=${extraLabels.includes(label) ? "extraLabel" : ""}
                     .style=${style}
                     @click=${() => this.itemAction(item, "label")}
                     @dblclick=${() => this.itemAction(item, "dbl_label")}
