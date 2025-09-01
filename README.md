@@ -108,33 +108,39 @@ Spaces and hyphens turned into `_`, and everything became lowercase. In case of 
 
 ### Configuration Options
 
-| Name                 |   Type    |   Default    | Description     |
-| -------------------- | :-------: | :----------: | ------------------------------------------------------------------ |
-| `type`               | `string`  | **required** | `custom:todoist-card`            |
-| `entity`             | `string`  | **required** | An entity_id within the `sensor` domain.   |
-| `show_completed`     | `integer` | `5`          | Number of completed tasks shown at the end of the list (0 to disable).   |
-| `show_header`        | `boolean` | `true`       | Show friendly name of the selected `sensor` in the card header.      |
-| `show_item_add`      | `boolean` | `true`       | Show text input element for adding new items to the list.        |
-| `show_item_close`    | `boolean` | `true`       | Show `close/complete` and `uncomplete` buttons.       |
-| `show_item_delete`   | `boolean` | `true`       | Show `delete` buttons.        |
-| `show_item_labels`   | `boolean` | `true`       | Show item-level labels beneath each item (see `filter_labels` below). |
-| `show_card_labels`   | `boolean` | `true`       | Show card-level labels on top (see `filter_labels` below).        |
-| `show_dates`         | `boolean` | `false`      | Show due dates on the labels row.        |
-| `use_quick_add`      | `boolean` | `false`      | Use the [Quick Add](https://todoist.com/help/articles/task-quick-add) implementation, available in the official Todoist clients.<br>Note that Power-Todoist will automatically add your card's project tag, and your `filter_section`, if specified. |
-| `sort_by_due_date`   | `string`  | (none)       | Sort the tasks by their due date. If it is undefined, or `'false'`, no sorting occurs. If it is set to `'ascending'`, it sorts oldest due dates first. Any other string (I suggest using `'descending'`) will sort older dates last. |
-| `friendly_name`      | `string`  | `Todoist`    | The card name shown on top uses a somewhat elaborate logic: <br>the default is `Todoist`, if no name is specified. <br>But if a Section filter is specified, then that section name will be used instead. <br>Finally, if you do use the `friendly_name` option, it will override anything else.  |
-| `icons`   | `list` | ![image](https://github.com/pgorod/power-todoist-card/assets/15945027/793f8b01-4203-4e5a-81e1-785bb1d284a3) <br> ![image](https://github.com/pgorod/power-todoist-card/assets/15945027/2753b1ac-8e5a-42d7-b39d-6b30fb8fea2c) <br> ![image](https://github.com/pgorod/power-todoist-card/assets/15945027/5714d361-376b-4666-9ebf-a7611b13d0d4) <br> ![image](https://github.com/pgorod/power-todoist-card/assets/15945027/cc682901-ca9b-43e7-b1ba-e7eb276f66b4) | A list of 4 icon names from the [MDI Library](https://pictogrammers.com/library/mdi/), without the `mdi:`prefix. Icons will be used for the check mark of checkable items, the bullet of uncheckable items, the plus sign to add items, and the trash can to delete. <br>Defaults as shown are `["checkbox-marked-circle-outline", "circle-medium", "plus-outline", "trash-can-outline"]` |
-| `filter_section_id` | `integer` | `(none)`      | Only show tasks from one Todoist section, identified by its id.    |
-| `filter_section` | `string` | `(none)`      | Only show tasks from one Todoist section, identified by its name.  |
-| `filter_labels` | `list` | `(none)`      | Only show tasks with the specified Todoist labels. See **Filtering by Labels** below for details on this powerful option.    |
+| Name                    |   Type    |   Default    | Description     |
+| ----------------------- | :-------: | :----------: | ------------------------------------------------------------------ |
+| `type`                  | `string`  | **required** | `custom:todoist-card`            |
+| `entity`                | `string`  | **required** | An entity_id within the `sensor` domain.   |
+| `show_completed`        | `integer` | `5`          | Number of completed tasks shown at the end of the list (0 to disable).   |
+| `show_header`           | `boolean` | `true`       | Show friendly name of the selected `sensor` in the card header.      |
+| `show_item_add`         | `boolean` | `true`       | Show text input element for adding new items to the list.        |
+| `show_item_close`       | `boolean` | `true`       | Show `close/complete` and `uncomplete` buttons.       |
+| `show_item_delete`      | `boolean` | `true`       | Show `delete` buttons.        |
+| `show_item_description` | `boolean` | `true`    | Show the item's description from Todoist under the content.       |
+| `show_item_labels`      | `boolean` | `true`       | Show item-level labels beneath each item (see `filter_labels` below). |
+| `show_card_labels`      | `boolean` | `true`       | Show card-level labels on top (see `filter_labels` below).        |
+| `show_dates`            | `boolean` | `false`      | Show due dates on the labels row.        |
+| `use_quick_add`         | `boolean` | `false`      | Use the [Quick Add](https://todoist.com/help/articles/task-quick-add) implementation, available in the official Todoist clients.<br>Note that Power-Todoist will automatically add your card's project tag, and your `filter_section`, if specified. |
+| `sort_by_due_date`      | `string`  | (none)       | Sort the tasks by their due date. If it is undefined, or `'false'`, no sorting occurs. If it is set to `'ascending'`, it sorts oldest due dates first. Any other string (I suggest using `'descending'`) will sort older dates last. |
+| `friendly_name`         | `string`  | `Todoist`    | The card name shown on top uses a somewhat elaborate logic: <br>the default is `Todoist`, if no name is specified. <br>But if a Section filter is specified, then that section name will be used instead. <br>Finally, if you do use the `friendly_name` option, it will override anything else.  |
+| `icons`                 | `list` | ![image](https://github.com/pgorod/power-todoist-card/assets/15945027/793f8b01-4203-4e5a-81e1-785bb1d284a3) <br> ![image](https://github.com/pgorod/power-todoist-card/assets/15945027/2753b1ac-8e5a-42d7-b39d-6b30fb8fea2c) <br> ![image](https://github.com/pgorod/power-todoist-card/assets/15945027/5714d361-376b-4666-9ebf-a7611b13d0d4) <br> ![image](https://github.com/pgorod/power-todoist-card/assets/15945027/cc682901-ca9b-43e7-b1ba-e7eb276f66b4) | A list of 4 icon names from the [MDI Library](https://pictogrammers.com/library/mdi/), without the `mdi:`prefix. Icons will be used for the check mark of checkable items, the bullet of uncheckable items, the plus sign to add items, and the trash can to delete. <br>Defaults as shown are `["checkbox-marked-circle-outline", "circle-medium", "plus-outline", "trash-can-outline"]` |
+| `filter_section_id`     | `integer` | `(none)`      | Only show tasks from one Todoist section, identified by its id.    |
+| `filter_section`        | `string` | `(none)`      | Only show tasks from one Todoist section, identified by its name.  |
+| `filter_labels`         | `list` | `(none)`      | Only show tasks with the specified Todoist labels. See **Filtering by Labels** below for details on this powerful option.    |
 | `filter_show_dates_starting`<br>`filter_show_dates_ending` | `integer` or `string` | `(none)`      | Only show tasks with the specified dates window. See **Filtering by Dates** below for details.    |
 | `filter_show_dates_empty` | `boolean` | `true`      | Defines whether tasks without any specified date pass the filter or not. See **Filtering by Dates** below for details.    |
+| `extra_labels`          | `list` | `(none)`      | Adds "virtual" labels that appear in the card, but don't exist in Todoist at all. You can use a simple static label like `- "Hi"`. But the real use for this comes when you use a label in the format: `title: label1+label2+label3`. This will show the title as is, followed by a list of the real labels from that list that are present in the item. If you add a plus at the beginning of the list `title: +label1+label2+label3` it will show a count of how many of the labels from the list are present in the item. See the house meal counts example below. |
 
 > Note that the completed tasks list is cleared when the page is refreshed.
 
-#### Filtering by Labels
+#### Label colors
 
 Labels are colorful and beautiful. And useful! Define them in Todoist app, and don't forget to pick your favorite colors there - after some time, they will be picked up by PowerTodoist-card!
+
+If you have a label called `abc`, for example, you can define an additional label called `abc_outline` is found in Todoist labels, then this other label color will be used (without displaying the `_outline` part) and the visuals will be different: a colored border will be shown, instead of a solid fill.
+
+#### Filtering by Labels
 
 The `filter_labels` option allows for several possibilities.
 - a label name will **include** items with that label
@@ -212,7 +218,7 @@ Under those headers, you can use a list of actions to specify custom behaviours.
 | **`update`**       | Sets new values to the item's fields in Todoist. <br>This is a list which allows all Todoist field types: `content`, `description`, `priority`, `collapsed`, `assigned_by_uid`, `responsible_uid`, `day_order`<br>You can use variables here. One of the variables can be `%input%` which will cause the user to be prompted for the value. use `prompt_texts` to control the dialog box displayed. |
 | **`prompt_texts`** | Not really an action, but you can use this to set a couple of strings to be used in other actions. <br>Use two strings separated by the `\|` character. The first will be the dialog box title, the second will be the default value presented in the input box. The variable `%content%` will be useful here to show the current value. <br>So, for example, `"Insert new name:\|%content%"` will set the prompt for an update action that references `%input%` , asking the user to give a new name, showing the current name in the input box, so it can be easily edited. |
 | **`service`**   | Calls the specified service in Home Assistant. This is very powerful, you can use it to trigger automations and scripts! It is the action that contains a thousand possibilities! 🚀 <br>And this is what makes the PowerTodoist card really a Home Assistant thing - not just an interface to your Todoist.<br>Examples: `service: automation.notify_me` or `service: script.do_it_all` |
-| **`label`**        | Here `label` is a verb! You use this action to label the current item as you prefer. <br>Use a list of label names. If you prefix a label name with a `!` that label will be removed, instead of added. Use `!*` to clear all labels, `!_` to clear all labels starting with underscore, `!!` to clear all labels except those starting with underscore. |
+| **`label`**        | Here,  `label` is a verb! You use this action to label the current item as you prefer. <br>Use a list of label names. If you prefix a label name with a `!` that label will be removed, instead of added. Prefix with `:` to toggle the label. Use `!*` to clear all labels, `!_` to clear all labels starting with underscore, `!!` to clear all labels _except_ those starting with underscore. |
 | **`add`**          | A list of texts that will be sent as **Quick Add** to Todoist. More details about the syntax [below](#adding_tasks_from_automation). Remember to specify Project, section and labels, as necessary to match your filters and ensure the new item is visible where you want it. |
 | **`allow`**        | A list of user names that will be allowed to execute all the actions in the handling of the current event. To allow everyone, simply don't use this option. |
 | **`match`**        | A list of triplets that describe conditions. Each triplet looks like this: **`[field, value, action_domystuff]`**.<br>The **field** is one of the item fields as listed [here](https://developer.todoist.com/sync/v9/#items). <br>The **value** will be matched to that field (simple fields get simple comparisons, while array fields test if the value is included in the array). <br>If there is a match, then the custom **action** gets executed. This is a very powerful way of creating conditions to invoke subroutines when handling an event, allowing you to do different things for different users, or according to some label on the item.<br>Note that not everything is tested, and not everything will work, there are many scenarios and data types, and I am not building a full programming language here... but even the basic usage will prove very useful. |
@@ -299,3 +305,4 @@ That was a lot of work 😅! If you enjoy and use this card, I'd appreciate it i
 [![](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/pgorod)
 
 Note that you pick a one-time amount and select any value you want.
+
