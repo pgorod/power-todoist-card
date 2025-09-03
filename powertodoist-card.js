@@ -956,19 +956,26 @@ class PowerTodoistCard extends LitElement {
     }
 
     render() {
-        this.myConfig = this.parseConfig(this.config);
-        let state = this.hass.states[this.config.entity] || undefined;
-        if (!state || !state?.attributes) {
-            return html`Todoist sensor doesn't have any data yet. Please wait a few seconds and refresh.`;
+        if (this.hass === undefined) {
+            return html`Home Assistant is restarting. Please wait a few seconds...`;
         }
+
+        let state = this.hass.states[this.config.entity] || undefined;
+        if (state?.attributes === undefined) {
+            return html`Powertodoist sensors don't have any data yet. Please wait a few seconds and refresh. [todoist sensor] `;
+        }
+
         var label_colors = this.hass.states["sensor.label_colors"]; 
         label_colors = label_colors?.attributes?.label_colors;
         if (!label_colors) {
-            return html`Sensor label_colors doesn't have any data yet. Please wait a few seconds and refresh.`;
+            return html`Powertodoist sensors don't have any data yet. Please wait a few seconds and refresh. [label_colors sensor] `;
         }
-        if (!this.hass.states["sensor.dow"] || this.hass.states['sensor.dow']?.state?.length < 2) { // when not set, is [ "unknown" ]
-            return html`Sensor for days of week doesn't have any data yet. Please wait a few seconds and refresh.`;
+
+        if (!this.hass.states["sensor.dow"] || this.hass.states['sensor.dow']?.state === "unknown") {
+            return html`Powertodoist sensors don't have any data yet. Please wait a few seconds and refresh. [days of week sensor] `;
         }
+
+        this.myConfig = this.parseConfig(this.config);
 
         var icons = ((typeof this.config.icons !== 'undefined') && (this.config.icons.length >= 4)) 
             ? this.config.icons 
@@ -1089,11 +1096,12 @@ class PowerTodoistCard extends LitElement {
     }
     
     generateExtraLabels (labels, label_colors) {
+        if (label_colors === undefined) return [];
         var extraLabels = [];
 
         if (this.myConfig.extra_labels) {
-            this.myConfig.extra_labels.forEach(label => {
-                let l = label;
+            this.myConfig.extra_labels.forEach(l => {
+                //let l = label;
                                 
                 let parts = l.split(/[:+]/).map(s => s.trim());
                 let firstPart = parts[0]; 
@@ -1112,10 +1120,11 @@ class PowerTodoistCard extends LitElement {
                     filteredParts = (filteredParts.length > 0) ? [filteredParts.length] : [];
                 }
 
-                if (filteredParts.length > 0) {
+                if ((filteredParts.length > 0) || // we found something when filtering or counting a list
+                   (!l.includes(':'))) {  // there was no list, put static label in directly
                     let outlineLabel = label_colors.filter(lc => lc.name === firstPart + '_outline');
 
-                    let theColor = (label_colors.find(lc => lc.name === firstPart)?.color || "light_blue");
+                    let theColor = (label_colors.find(lc => lc.name === firstPart)?.color || "blue");
                     if (outlineLabel.length > 0) {
                         // strip "_outline" which has 8 chars, we'll then re-add it to the end
                         theColor = outlineLabel[0].color;//.slice(0, -8); 
@@ -1123,8 +1132,9 @@ class PowerTodoistCard extends LitElement {
                     let finalLabel = firstPart + ": " + filteredParts.join("+") + (outlineLabel.length > 0 ? '_outline' : ''); 
 
                     extraLabels.push(finalLabel);
+                    if (!label_colors.some(item => item.name === finalLabel)) 
+                        label_colors.push({ name: finalLabel, color: theColor });
 
-                    label_colors.push({ name: finalLabel, color: theColor });
                 }
             });
         }
