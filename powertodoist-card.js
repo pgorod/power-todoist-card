@@ -239,7 +239,7 @@ class PowerTodoistCardEditor extends LitElement {
                     @change=${this.valueChanged}
                 >
                 </ha-switch>
-                <span>Show text input element for adding new items to the list</span>
+                <span>Show text input element for adding new tasks to the list</span>
             </div>
 
             <div class="option">
@@ -342,7 +342,7 @@ class PowerTodoistCard extends LitElement {
     }
 
     getCardSize() {
-        return this.hass ? (this.hass.states[this.config.entity].attributes.items.length || 1) : 1;
+        return this.hass ? (this.hass.states[this.config.entity].attributes.tasks.length || 1) : 1;
     }
     
     random(min, max) {
@@ -413,10 +413,16 @@ class PowerTodoistCard extends LitElement {
                             if (state.attributes.project.name && !qa.includes('#'))
                                 qa = qa + ' #' + state.attributes.project.name; //.replaceAll(' ','');
                         } catch (error) { }
+                        try {
+                           if (this.myConfig.filter_section) {
+                                const escapedSection = this.myConfig.filter_section.replace(/ /g, '\\ ');
+                                qa = qa.replace('/' + this.myConfig.filter_section, '/' + escapedSection);
+                            }
+                        } catch (error) { }
 
                         this.hass
                             .callService('rest_command', 'todoist', {
-                                url: 'quick/add',
+                                url: 'tasks/quick',
                                 payload: 'text=' + qa,
                             })
                             .then(response => {
@@ -454,7 +460,7 @@ class PowerTodoistCard extends LitElement {
         let myStrConfig = JSON.stringify(srcConfig);
         let date_formatted = (new Date()).format(this.myConfig["date_format"] || "mmm dd H:mm"); 
 //        let date_formatted = (new Date()).format(srcConfig["date_format"] || "mmm dd H:mm");
-        try { project_notes = this.hass.states[this.config.entity].attributes['project_notes'];} catch (error) { }
+        try { project_notes = this.hass.states['sensor.comments_sensor'].attributes['results'];} catch (error) { }
         const strLabels =  (typeof(item) !== "undefined" && item.labels) ? JSON.stringify(item.labels) : "";
 
         var mapReplaces = {
@@ -672,7 +678,7 @@ class PowerTodoistCard extends LitElement {
 
         // Fetch item from hass state
         let state = this.hass.states[this.config.entity] || undefined;
-        let items = state?.attributes?.items || [];
+        let items = state?.attributes?.tasks || [];
         const itemIndex = items.findIndex(i => i.id === item.id);
         if (itemIndex === -1) return;
         let currentLabels = items[itemIndex].labels || [];
@@ -961,7 +967,7 @@ class PowerTodoistCard extends LitElement {
         }
 
         let state = this.hass.states[this.config.entity] || undefined;
-        if (state?.attributes === undefined) {
+        if (state?.attributes === undefined) {  
             return html`Powertodoist sensors don't have any data yet. Please wait a few seconds and refresh. [todoist sensor] `;
         }
 
@@ -982,7 +988,8 @@ class PowerTodoistCard extends LitElement {
             : ["checkbox-marked-circle-outline", "circle-medium", "plus-outline", "trash-can-outline",
                "checkbox-marked-circle-outline", "checkbox-blank-circle-outline"]; 
         
-        let items = state.attributes.items || [];
+        let items = state.attributes.tasks || []; //changed from .items to .tasks
+        
 
         items = this.filterDates(items);
         items = this.filterPriority(items);
