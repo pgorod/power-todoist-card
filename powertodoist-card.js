@@ -406,20 +406,13 @@ class PowerTodoistCard extends LitElement {
 
                         var qa = value;
                         try {
-                            if (this.myConfig.filter_section && !qa.includes('/'))
-                                qa = qa + ' /' + this.myConfig.filter_section; //.replaceAll(' ','');
+                            if (this.myConfig.filter_section && !qa.includes(' /'))
+                                qa = qa + ' /' + this.myConfig.filter_section.replaceAll(' ','\\ ');
                         } catch (error) { }
                         try {
-                            if (state.attributes.project.name && !qa.includes('#'))
-                                qa = qa + ' #' + state.attributes.project.name; //.replaceAll(' ','');
-                        } catch (error) { }
-                        try {
-                           if (this.myConfig.filter_section) {
-                                const escapedSection = this.myConfig.filter_section.replace(/ /g, '\\ ');
-                                qa = qa.replace('/' + this.myConfig.filter_section, '/' + escapedSection);
-                            }
-                        } catch (error) { }
-
+                            if (state.attributes.project.name && !qa.includes(' #'))
+                                qa = qa + ' #' + state.attributes.project.name.replaceAll(' ','\\ ');
+                        } catch (error) { } 
                         this.hass
                             .callService('rest_command', 'todoist', {
                                 url: 'tasks/quick',
@@ -784,6 +777,9 @@ class PowerTodoistCard extends LitElement {
                 url: 'sync',
                 payload: 'commands=' + JSON.stringify(commands),
             })
+            .error(err => {
+                console.error('Error sending command to Todoist:', err);
+            })
             .then(response => {
                 // specific post-actions:
                 switch (action) {
@@ -998,7 +994,7 @@ class PowerTodoistCard extends LitElement {
         let section_name2id = [];
         if (!this.myConfig.filter_section_id && this.myConfig.filter_section) {
             //let state = this.hass.states[this.config.entity].attributes;
-            state.attributes.sections.map(s => {
+            state.attributes?.sections.map(s => {
                 section_name2id[s.name] = s.id;
             });            
         }
@@ -1050,7 +1046,7 @@ class PowerTodoistCard extends LitElement {
             <div class="powertodoist-list">
                 ${items.length
                     ? items.map(item => {
-                        return html`<div class="powertodoist-item" .id=${"item_" + item.id}>
+                        return html`<div class="powertodoist-item" .id=${"item_" + item.id} style="padding-left:${item.parent_id ? 32 : 0}px">
                             ${(this.config.show_item_close === undefined) || (this.config.show_item_close !== false)
                                 ? html`<ha-icon-button
                                     class="powertodoist-item-close"
@@ -1070,10 +1066,24 @@ class PowerTodoistCard extends LitElement {
                                     @click=${() => this.itemAction(item, "description")} 
                                     @dblclick=${() => this.itemAction(item, "dbl_description")}   
                                 ><span class="powertodoist-item-description">${item.description}</span></div>`
-                                : html`` }
+                                : html`` }        
                             ${this.renderLabels(
                                 item, 
-                                this.myConfig.show_dates && item.due ? dateFormat(item.due.date, "🗓 dd-mmm H'h'MM") : [],
+                                this.myConfig.show_dates && item.due
+                                    ? (() => {
+                                        // pick the mask (either from config or fallback)
+                                        const wantMask = this.config.date_format || "dd-mmm H'h'MM";
+
+                                        // if it's a named mask (e.g., "default", "fullDate"), resolve it
+                                        const resolvedMask = dateFormat.masks[wantMask] || wantMask;
+
+                                        // format the date with the resolved mask
+                                        const formatted = dateFormat(item.due.date, resolvedMask);
+
+                                        // prepend emoji after formatting
+                                        return "🗓 " + formatted;
+                                    })()
+                                    : [],
                                 [...item.labels].filter(String),
 //                                    [this.myConfig.show_dates && item.due ? dateFormat(item.due.date, "🗓 dd-mmm H'h'MM") : 
 //                                    [], ...item.labels].filter(String), // filter removes the empty []s
@@ -1148,15 +1158,15 @@ class PowerTodoistCard extends LitElement {
         return extraLabels;
     }
 
-    renderLabels(item, dates, labels, exclusions, label_colors) {
+    renderLabels(item, date, labels, exclusions, label_colors) {
 
         var extraLabels = this.generateExtraLabels(labels, label_colors);
 
-        labels = labels.concat(extraLabels);
+        labels = [date, ...labels, ...extraLabels].filter(String);
 
         // prepend a date as a "fake" label:
         if ((item !== undefined) && (this.config.show_item_labels === false)) {
-            labels = this.myConfig.show_dates && item.due ? [dates, ...extraLabels] : [...extraLabels];
+            labels = this.myConfig.show_dates && item.due ? [date, ...extraLabels] : [...extraLabels];
         }        
         
         let rendered = html`
