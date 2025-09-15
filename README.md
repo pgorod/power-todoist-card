@@ -1,4 +1,4 @@
-# PowerTodoist Card
+# PowerTodoi   t Card
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
 ![hacs_badge](https://img.shields.io/github/v/release/pgorod/power-todoist-card)
@@ -130,6 +130,7 @@ Spaces and hyphens turned into `_`, and everything became lowercase. In case of 
 | `filter_labels`         | `list` | `(none)`      | Only show tasks with the specified Todoist labels. See **Filtering by Labels** below for details on this powerful option.    |
 | `filter_show_dates_starting`<br>`filter_show_dates_ending` | `integer` or `string` | `(none)`      | Only show tasks with the specified dates window. See **Filtering by Dates** below for details.    |
 | `filter_show_dates_empty` | `boolean` | `true`      | Defines whether tasks without any specified date pass the filter or not. See **Filtering by Dates** below for details.    |
+| `date_format` | `string` | `dd-mmm HHhmm ` | Defines date format. This affects two things: how item dates are displayed and how date variables are substituted. <br>Complete formatting options are documented [here](https://blog.stevenlevithan.com/archives/javascript-date-format). |
 | `extra_labels`          | `list` | `(none)`      | Adds "virtual" labels that appear in the card, but don't exist in Todoist at all. You can use a simple static label like `- "Hi"`. But the real use for this comes when you use a label in the format: `title: label1+label2+label3`. This will show the title as is, followed by a list of the real labels from that list that are present in the item. If you add a plus at the beginning of the list `title: +label1+label2+label3` it will show a count of how many of the labels from the list are present in the item. See the house meal counts example below. |
 | `status_from_labels`    | `list` | `(none)`      | Use a list of label criteria similar to the **Filtering by Labels** section (detailed below). This will evaluate to `true` or `false` for each item. It will affect the icon displayed for the status of the item (checked/unchecked) so you can manage this with labels instead of the actual Todoist completion. If `true` the 5th icon of `icons` configuration is used, if `false` then the 6th icon is used - if these icons are defined. |
 
@@ -255,6 +256,11 @@ This feature is undergoing a major re-factoring and might not work perfectly wel
 | **`%project_notes%`**   | In Todoist, you can add notes at the Project level, not just at the item level. <br>You can access the first of these notes with this variable. You can also use **`%project_notes_2%`**, **`%project_notes_3%`**, etc, to access the other notes. |
 
 Let me know if you have other ideas for variables that could prove useful.
+
+## Sub-tasks
+
+ We have a very, very partial implementation. If a task is a sub-task, then it appears indented under the task above it. That's it, nothing else. But you are responsible for making sure that the "task above it" is actually its parent task. This involves things like filtering and sorting. Sorry, but a proper implementation would be very complex and would involve a rewrite of all our code.
+
 
 ## Learn by example
 
