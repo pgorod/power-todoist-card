@@ -327,7 +327,76 @@ class PowerTodoistCard extends LitElement {
             config: Object,
         };
     }
-    
+
+    //trying to set up long press
+
+   // Configuration
+    _longPressMs = 1500;     // How long to hold before triggering long press (milliseconds)
+    _clickDelayMs = 500;     // How long to wait for second click in double-click detection (milliseconds)
+
+    // State tracking
+    _lpTimer = null;         // Timer ID for long press - tracks if long press is active
+    _clickTimer = null;      // Timer ID for single click delay - prevents premature single-click firing
+    _clickCount = 0;         // Counts clicks (0, 1, or 2) to detect single vs double click
+
+
+    _lpStart(item, longPressActionName) {
+        // Start long press timer
+        this._lpTimer = setTimeout(() => {
+            this._lpTimer = null;
+            this._clickCount = 0; // Cancel any pending clicks
+            if (this._clickTimer) {
+                clearTimeout(this._clickTimer);
+                this._clickTimer = null;
+            }
+            this.itemAction(item, longPressActionName);
+        }, this._longPressMs);
+    }
+
+    _lpEnd(item, clickActionName, dblClickActionName = "") {
+        if (this._lpTimer) {
+            // Long press timer still running → this was a short press
+            clearTimeout(this._lpTimer);
+            this._lpTimer = null;
+            
+            // Handle click counting for single/double click detection
+            this._clickCount++;
+            
+            if (this._clickCount === 1) {
+                if (dblClickActionName === "") {
+                    // No double click detection wanted - fast-track to single click action
+                    this._clickCount = 0;
+                    this._clickTimer = null;
+                    this.itemAction(item, clickActionName);
+                }
+                else {
+                    // First click - start timer to wait for potential second click
+                    this._clickTimer = setTimeout(() => {
+                        // Timer expired with only one click → single click
+                        this._clickCount = 0;
+                        this._clickTimer = null;
+                        this.itemAction(item, clickActionName);
+                    }, this._clickDelayMs);
+                }
+            } else if (this._clickCount === 2) {
+                // Second click within delay → double click
+                clearTimeout(this._clickTimer);
+                this._clickTimer = null;
+                this._clickCount = 0;
+                this.itemAction(item, dblClickActionName);
+            }
+        }
+    }
+
+    _lpCancel() {
+        if (this._lpTimer) {
+            clearTimeout(this._lpTimer);
+            this._lpTimer = null;
+        }
+        // Note: We don't cancel click timers here as pointer leave/cancel 
+        // shouldn't interfere with click detection
+    }
+
     static getConfigElement() {
         return document.createElement('powertodoist-card-editor');
     }
@@ -452,7 +521,6 @@ class PowerTodoistCard extends LitElement {
         var project_notes = [];
         let myStrConfig = JSON.stringify(srcConfig);
         let date_formatted = (new Date()).format(this.myConfig["date_format"] || "mmm dd H:mm"); 
-//        let date_formatted = (new Date()).format(srcConfig["date_format"] || "mmm dd H:mm");
         try { project_notes = this.hass.states['sensor.comments_sensor'].attributes['results'];} catch (error) { }
         const strLabels =  (typeof(item) !== "undefined" && item.labels) ? JSON.stringify(item.labels) : "";
 
@@ -574,13 +642,6 @@ class PowerTodoistCard extends LitElement {
                 input = window.prompt(questionText, defaultText) || "";
         }
 
-        //let date_formatted2 = (new Date()).format(this.myConfig["date_format"] || "mmm dd H:mm"); // moved to Parse, delete when not needed
-        //var mapReplaces = {    // OLD OLD OLD
-        //    "%user%": this.hass.user.name,
-        //    "%date%": `${date_formatted2}`,
-        //    "%str_labels%" : strLabels,
-        //};
-
         if (updates.length || labelChanges.length) {
             let newIndex = commands.push({
                 "type": "item_update",
@@ -624,16 +685,27 @@ class PowerTodoistCard extends LitElement {
         let default_actions = {
             "actions_close" : { 'type': 'item_close', 'uuid': this.getUUID(), 'args': {'id': item.id} },
             "actions_dbl_close": {},
+            "actions_longpress_close" : {},
+
             "actions_content" : { "type": "item_update", "uuid": this.getUUID(), "args": { "id": item.id, "content": input } },
             "actions_dbl_content" : {},
+            "actions_longpress_content" : {},
+
             "actions_description" : { "type": "item_update", "uuid": this.getUUID(), "args": { "id": item.id, "description": input } },
             "actions_dbl_description" : {},
+            "actions_longpress_description" : {},
+
             "actions_label" : {},
             "actions_dbl_label" : {},
+            "actions_longpress_label" : {},
+
             "actions_delete" : { 'type': 'item_delete', 'uuid': this.getUUID(), 'args': {'id': item.id } },
             "actions_dbl_delete" : {},
+            "actions_longpress_delete" : {},
+
             "actions_uncomplete" : { 'type': 'item_uncomplete', 'uuid': this.getUUID(), 'args': {'id': item.id } },
             "actions_dbl_uncomplete" : {},
+            "actions_longpress_uncomplete" : {},
         }
         
         // actions without arguments, and which get executed just like the defaults:
@@ -774,38 +846,54 @@ class PowerTodoistCard extends LitElement {
 
         // deal with commands:
         this.hass.callService('rest_command', 'todoist', {
-                url: 'sync',
-                payload: 'commands=' + JSON.stringify(commands),
-            })
-            .error(err => {
-                console.error('Error sending command to Todoist:', err);
-            })
-            .then(response => {
-                // specific post-actions:
-                switch (action) {
-                    case 'close':
-                        if (this.itemsJustCompleted.length >= this.config.show_completed) 
-                           this.itemsJustCompleted.splice(0, this.itemsJustCompleted.length - this.config.show_completed + 1);
-                        this.itemsJustCompleted.push(item);
-                    break;
-                    case 'content':        
-                    break;
-                    case 'delete':
-                    break;
+            url: 'sync',
+            payload: 'commands=' + JSON.stringify(commands),
+        })
+        .then(response => {
+            // specific post-actions:
 
-                    case 'unlist_completed': // removes from internal list
-                    case 'uncomplete':       // removes from internal list and uncloses in todoist
-                        this.itemsJustCompleted = this.itemsJustCompleted.filter(v => {
-                            return v.id != item.id;
-                        });
+            // Extract the actual command type from the commands array
+            const commandTypes = commands.map(cmd => cmd.type);
+
+            // Handle UI updates based on command types, not action names
+            if (commandTypes.includes('item_close')) {
+                if (this.itemsJustCompleted.length >= this.config.show_completed) {
+                    this.itemsJustCompleted.splice(0, this.itemsJustCompleted.length - this.config.show_completed + 1);
+                }
+                this.itemsJustCompleted.push(item);
+            } else if (commandTypes.includes('item_uncomplete') || commandTypes.includes('item_delete')) {
+                this.itemsJustCompleted = this.itemsJustCompleted.filter(v => v.id != item.id);
+            }
+            /*switch (action) {
+                case 'close':
+                    if (this.itemsJustCompleted.length >= this.config.show_completed) {
+                        this.itemsJustCompleted.splice(0, this.itemsJustCompleted.length - this.config.show_completed + 1);
+                    }
+                    this.itemsJustCompleted.push(item);
                     break;
+                case 'content':        
+                    break;
+                case 'delete':
+                    break;
+                case 'unlist_completed': // removes from internal list
+                case 'uncomplete':       // removes from internal list and uncloses in todoist
+                    this.itemsJustCompleted = this.itemsJustCompleted.filter(v => {
+                        return v.id != item.id;
+                    });
+                    break;
+                default:
+                    break;
+            }*/
 
-                    default:
-                  }
-
-                // note that this may execute _after_ itemAction() ends, because it runs async upon getting an API response
-                this.hass.callService('homeassistant', 'update_entity', { entity_id: this.config.entity, });
+            // Update the entity after processing the response
+            return this.hass.callService('homeassistant', 'update_entity', { 
+                entity_id: this.config.entity 
             });
+        })
+        .catch(err => {
+            console.error('Error in Todoist operation:', err);
+            throw err; // Re-throw to propagate the error
+        });
 
         // deal with automations:    
         if (automation.length) {
@@ -951,10 +1039,33 @@ class PowerTodoistCard extends LitElement {
     }
 
     getIconName(icons, baseIndex, item) {
-        if ((this.config.status_from_labels === undefined) || (item.statusFromLabelCriteria === undefined) || icons.length < 5)
-            return icons[baseIndex];
+        // Default to base icon
+        let chosen = icons[baseIndex];
 
-        return item.statusFromLabelCriteria ? icons[4] : icons[5];
+        // If label-based override is enabled, use index 4 or 5
+        if (
+            this.config.status_from_labels !== undefined &&
+            item?.statusFromLabelCriteria !== undefined &&
+            icons.length >= 5
+        ) {
+            chosen = item.statusFromLabelCriteria ? icons[4] : icons[5];
+        }
+
+        return chosen; // { name, color }
+    }
+
+    formatDueDate(dueDate, configFormat) {
+        // Default format if none provided
+        const wantMask = configFormat || "dd-mmm H'h'MM";
+        
+        // If it's a named mask (e.g., "default", "fullDate"), resolve it
+        const resolvedMask = dateFormat.masks[wantMask] || wantMask;
+        
+        // Format the date with the resolved mask
+        const formatted = dateFormat(dueDate, resolvedMask);
+        
+        // Prepend emoji and return
+        return "🗓 " + formatted;
     }
 
     render() {
@@ -979,10 +1090,23 @@ class PowerTodoistCard extends LitElement {
 
         this.myConfig = this.parseConfig(this.config);
 
-        var icons = ((typeof this.config.icons !== 'undefined') && (this.config.icons.length >= 4)) 
-            ? this.config.icons 
-            : ["checkbox-marked-circle-outline", "circle-medium", "plus-outline", "trash-can-outline",
-               "checkbox-marked-circle-outline", "checkbox-blank-circle-outline"]; 
+        // Build icon config: support "icon" or "icon:color" form
+        var rawIcons = (this.config.icons && this.config.icons.length >= 4)
+        ? this.config.icons
+        : [
+            "checkbox-marked-circle-outline:green",
+            "circle-medium",
+            "plus-outline:blue",
+            "trash-can-outline:red",
+            "checkbox-marked-circle-outline",
+            "checkbox-blank-circle-outline"
+            ];
+
+        // Normalize into array of { name, color }
+        var icons = rawIcons.map(str => {
+            const [name, color] = str.split(":");
+            return { name, color: color || "" };
+        });
         
         let items = state.attributes.tasks || []; //changed from .items to .tasks
         
@@ -1004,7 +1128,7 @@ class PowerTodoistCard extends LitElement {
                 return item.section_id === section_id;
             });
         }
-
+ 
         // filter items matching filter_labels criteria
         var cardLabels = [];
         items = items.filter(item => this.assessLabelCriteriaForItem.call(this, item, this.myConfig?.filter_labels, true, cardLabels));
@@ -1050,43 +1174,41 @@ class PowerTodoistCard extends LitElement {
                             ${(this.config.show_item_close === undefined) || (this.config.show_item_close !== false)
                                 ? html`<ha-icon-button
                                     class="powertodoist-item-close"
-                                    @click=${() => this.itemAction(item, "close")} 
-                                    @dblclick=${() => this.itemAction(item, "dbl_close")} >
-                                    <ha-icon .icon=${"mdi:" + this.getIconName(icons, 0, item)}></ha-icon>
+                                    @pointerdown=${(e) => this._lpStart(item, "longpress_close")}
+                                    @pointerup=${(e) => this._lpEnd(item, "close", "dbl_close")}
+                                    @pointercancel=${this._lpCancel}
+                                    @pointerleave=${this._lpCancel} >
+                                    <ha-icon
+                                        .icon=${"mdi:" + this.getIconName(icons, 0, item).name}
+                                        style="color:${this.getIconName(icons, 0, item).color}"
+                                    ></ha-icon>
                                 </ha-icon-button>`
-                                : html`<ha-icon .icon=${"mdi:" + icons[1]}></ha-icon>` 
+                                : html`<ha-icon 
+                                        .icon=${"mdi:" + icons[1].name} 
+                                        style=${icons[1].color ? `color:${icons[1].color};` : ""}
+                                    ></ha-icon>` 
                             }
                             <div class="powertodoist-item-text"><div 
-                                @click=${() => this.itemAction(item, "content")} 
-                                @dblclick=${() => this.itemAction(item, "dbl_content")}
+                                @pointerdown=${(e) => this._lpStart(item, "longpress_content")}
+                                @pointerup=${(e) => this._lpEnd(item, "content", "dbl_content")}
+                                @pointercancel=${this._lpCancel}
+                                @pointerleave=${this._lpCancel}
                             ><span class="powertodoist-item-content ${(this.itemsEmphasized[item.id]) ? css`powertodoist-special` : css``}" >
                             ${item.content}</span></div>
                             ${(this.config.show_item_description === undefined) || (this.config.show_item_description !== false) && item.description
                                 ? html`<div
-                                    @click=${() => this.itemAction(item, "description")} 
-                                    @dblclick=${() => this.itemAction(item, "dbl_description")}   
+                                    @pointerdown=${(e) => this._lpStart(item, "longpress_description")}
+                                    @pointerup=${(e) => this._lpEnd(item, "description", "dbl_description")}
+                                    @pointercancel=${this._lpCancel}
+                                    @pointerleave=${this._lpCancel}
                                 ><span class="powertodoist-item-description">${item.description}</span></div>`
                                 : html`` }        
                             ${this.renderLabels(
                                 item, 
                                 this.myConfig.show_dates && item.due
-                                    ? (() => {
-                                        // pick the mask (either from config or fallback)
-                                        const wantMask = this.config.date_format || "dd-mmm H'h'MM";
-
-                                        // if it's a named mask (e.g., "default", "fullDate"), resolve it
-                                        const resolvedMask = dateFormat.masks[wantMask] || wantMask;
-
-                                        // format the date with the resolved mask
-                                        const formatted = dateFormat(item.due.date, resolvedMask);
-
-                                        // prepend emoji after formatting
-                                        return "🗓 " + formatted;
-                                    })()
+                                    ? this.formatDueDate(item.due.date, this.config.date_format)
                                     : [],
                                 [...item.labels].filter(String),
-//                                    [this.myConfig.show_dates && item.due ? dateFormat(item.due.date, "🗓 dd-mmm H'h'MM") : 
-//                                    [], ...item.labels].filter(String), // filter removes the empty []s
                                 // exclusions:
                                 [...(cardLabels.length == 1 ? cardLabels : []), // card labels excluded unless more than one
                                 ...item.labels.filter(l => l.startsWith("_"))], // "_etc" labels excluded
@@ -1095,15 +1217,20 @@ class PowerTodoistCard extends LitElement {
                         ${(this.config.show_item_delete === undefined) || (this.config.show_item_delete !== false)
                             ? html`<ha-icon-button
                                 class="powertodoist-item-delete"
-                                @click=${() => this.itemAction(item, "delete")} 
-                                @dblclick=${() => this.itemAction(item, "dbl_delete")} >
-                                <ha-icon .icon=${"mdi:" + icons[3]}></ha-icon>
+                                @pointerdown=${(e) => this._lpStart(item, "longpress_delete")}
+                                @pointerup=${(e) => this._lpEnd(item, "delete", "dbl_delete")}
+                                @pointercancel=${this._lpCancel}
+                                @pointerleave=${this._lpCancel} >
+                                <ha-icon 
+                                    .icon=${"mdi:" + icons[3].name} 
+                                    style=${icons[3].color ? `color:${icons[3].color};` : ""}
+                                ></ha-icon>
                             </ha-icon-button>`
                             : html``}    
                         </div>
                     </div>`;
                     })
-                    : html`<div class="powertodoist-list-empty">No uncompleted tasks!</div>`}
+                    : html`<div class="powertodoist-list-empty">No tasks to do!</div>`}
                 ${this.renderLowerPart(icons)}
             </div>
             ${this.renderFooter()}
@@ -1186,8 +1313,10 @@ class PowerTodoistCard extends LitElement {
                 return html`<li 
                     class=${extraLabels.includes(label) ? "extraLabel" : ""}
                     .style=${style}
-                    @click=${() => this.itemAction(item, "label")}
-                    @dblclick=${() => this.itemAction(item, "dbl_label")}
+                    @pointerdown=${(e) => this._lpStart(item, "longpress_label")}
+                    @pointerup=${(e) => this._lpEnd(item, "label", "dbl_label")}
+                    @pointercancel=${this._lpCancel}
+                    @pointerleave=${this._lpCancel}
                     >
                     <span>${displayLabel}</span></li>`;
             })}</ul></div>` 
@@ -1205,11 +1334,20 @@ class PowerTodoistCard extends LitElement {
                         ${(this.config.show_item_close === undefined) || (this.config.show_item_close !== false)
                             ? html`<ha-icon-button
                                 class="powertodoist-item-close"
-                                @click=${() => this.itemAction(item, "uncomplete")} 
-                                @dblclick=${() => this.itemAction(item, "dbl_uncomplete")} >
-                                <ha-icon .icon=${"mdi:" + icons[2]}></ha-icon>
+                                @pointerdown=${(e) => this._lpStart(item, "longpress_uncomplete")}
+                                @pointerup=${(e) => this._lpEnd(item, "uncomplete", "dbl_uncomplete")}
+                                @pointercancel=${this._lpCancel}
+                                @pointerleave=${this._lpCancel} >
+                                <ha-icon 
+                                    .icon=${"mdi:" + icons[2].name} 
+                                    style=${icons[2].color ? `color:${icons[2].color};` : ""}
+                                ></ha-icon>
                             </ha-icon-button>`
-                            : html`<ha-icon .icon=${"mdi:" + icons[0]} ></ha-icon>`}
+                            : html`<ha-icon 
+                                        .icon=${"mdi:" + icons[0].name} 
+                                        style=${icons[0].color ? `color:${icons[0].color};` : ""}
+                                    ></ha-icon>`
+                        }
                         <div class="powertodoist-item-text">
                             ${item.description
                                 ? html`<span class="powertodoist-item-content">${item.content}</span>
@@ -1219,14 +1357,20 @@ class PowerTodoistCard extends LitElement {
                         ${(this.config.show_item_delete === undefined) || (this.config.show_item_delete !== false)
                             ? html`<ha-icon-button
                                 class="powertodoist-item-delete"
-                                @click=${() => this.itemAction(item, "unlist_completed")} 
-                                @dblclick=${() => this.itemAction(item, "dbl_unlist_completed")} >
-                                <ha-icon .icon=${"mdi:" + icons[3]}></ha-icon>
+                                @pointerdown=${(e) => this._lpStart(item, "longpress_unlist_completed")}
+                                @pointerup=${(e) => this._lpEnd(item, "unlist_completed", "dbl_unlist_completed")}
+                                @pointercancel=${this._lpCancel}
+                                @pointerleave=${this._lpCancel}
+                                >
+                                <ha-icon 
+                                    .icon=${"mdi:" + icons[3].name} 
+                                    style=${icons[3].color ? `color:${icons[3].color};` : ""}
+                                ></ha-icon>
                             </ha-icon-button>`
                             : html``}
                     </div>`;
                 })
-            : html``}
+            : html`TEMP: nothing to undelete`}
         `;
         return rendered;
     }
