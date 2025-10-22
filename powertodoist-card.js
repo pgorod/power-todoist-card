@@ -239,7 +239,7 @@ class PowerTodoistCardEditor extends LitElement {
                     @change=${this.valueChanged}
                 >
                 </ha-switch>
-                <span>Show text input element for adding new tasks to the list</span>
+                <span>Show text input element for adding new items to the list</span>
             </div>
 
             <div class="option">
@@ -327,76 +327,7 @@ class PowerTodoistCard extends LitElement {
             config: Object,
         };
     }
-
-    //trying to set up long press
-
-   // Configuration
-    _longPressMs = 1500;     // How long to hold before triggering long press (milliseconds)
-    _clickDelayMs = 500;     // How long to wait for second click in double-click detection (milliseconds)
-
-    // State tracking
-    _lpTimer = null;         // Timer ID for long press - tracks if long press is active
-    _clickTimer = null;      // Timer ID for single click delay - prevents premature single-click firing
-    _clickCount = 0;         // Counts clicks (0, 1, or 2) to detect single vs double click
-
-
-    _lpStart(item, longPressActionName) {
-        // Start long press timer
-        this._lpTimer = setTimeout(() => {
-            this._lpTimer = null;
-            this._clickCount = 0; // Cancel any pending clicks
-            if (this._clickTimer) {
-                clearTimeout(this._clickTimer);
-                this._clickTimer = null;
-            }
-            this.itemAction(item, longPressActionName);
-        }, this._longPressMs);
-    }
-
-    _lpEnd(item, clickActionName, dblClickActionName = "") {
-        if (this._lpTimer) {
-            // Long press timer still running → this was a short press
-            clearTimeout(this._lpTimer);
-            this._lpTimer = null;
-            
-            // Handle click counting for single/double click detection
-            this._clickCount++;
-            
-            if (this._clickCount === 1) {
-                if (dblClickActionName === "") {
-                    // No double click detection wanted - fast-track to single click action
-                    this._clickCount = 0;
-                    this._clickTimer = null;
-                    this.itemAction(item, clickActionName);
-                }
-                else {
-                    // First click - start timer to wait for potential second click
-                    this._clickTimer = setTimeout(() => {
-                        // Timer expired with only one click → single click
-                        this._clickCount = 0;
-                        this._clickTimer = null;
-                        this.itemAction(item, clickActionName);
-                    }, this._clickDelayMs);
-                }
-            } else if (this._clickCount === 2) {
-                // Second click within delay → double click
-                clearTimeout(this._clickTimer);
-                this._clickTimer = null;
-                this._clickCount = 0;
-                this.itemAction(item, dblClickActionName);
-            }
-        }
-    }
-
-    _lpCancel() {
-        if (this._lpTimer) {
-            clearTimeout(this._lpTimer);
-            this._lpTimer = null;
-        }
-        // Note: We don't cancel click timers here as pointer leave/cancel 
-        // shouldn't interfere with click detection
-    }
-
+    
     static getConfigElement() {
         return document.createElement('powertodoist-card-editor');
     }
@@ -411,7 +342,7 @@ class PowerTodoistCard extends LitElement {
     }
 
     getCardSize() {
-        return this.hass ? (this.hass.states[this.config.entity].attributes.tasks.length || 1) : 1;
+        return this.hass ? (this.hass.states[this.config.entity].attributes.items.length || 1) : 1;
     }
     
     random(min, max) {
@@ -475,16 +406,17 @@ class PowerTodoistCard extends LitElement {
 
                         var qa = value;
                         try {
-                            if (this.myConfig.filter_section && !qa.includes(' /'))
-                                qa = qa + ' /' + this.myConfig.filter_section.replaceAll(' ','\\ ');
+                            if (this.myConfig.filter_section && !qa.includes('/'))
+                                qa = qa + ' /' + this.myConfig.filter_section; //.replaceAll(' ','');
                         } catch (error) { }
                         try {
-                            if (state.attributes.project.name && !qa.includes(' #'))
-                                qa = qa + ' #' + state.attributes.project.name.replaceAll(' ','\\ ');
-                        } catch (error) { } 
+                            if (state.attributes.project.name && !qa.includes('#'))
+                                qa = qa + ' #' + state.attributes.project.name; //.replaceAll(' ','');
+                        } catch (error) { }
+
                         this.hass
                             .callService('rest_command', 'todoist', {
-                                url: 'tasks/quick',
+                                url: 'quick/add',
                                 payload: 'text=' + qa,
                             })
                             .then(response => {
@@ -521,18 +453,20 @@ class PowerTodoistCard extends LitElement {
         var project_notes = [];
         let myStrConfig = JSON.stringify(srcConfig);
         let date_formatted = (new Date()).format(this.myConfig["date_format"] || "mmm dd H:mm"); 
-        try { project_notes = this.hass.states['sensor.comments_sensor'].attributes['results'];} catch (error) { }
+//        let date_formatted = (new Date()).format(srcConfig["date_format"] || "mmm dd H:mm");
+        try { project_notes = this.hass.states[this.config.entity].attributes['project_notes'];} catch (error) { }
         const strLabels =  (typeof(item) !== "undefined" && item.labels) ? JSON.stringify(item.labels) : "";
 
         var mapReplaces = {
             "%user%"          : this.hass ? this.hass.user.name : "",
             "%date%"          : `${date_formatted}`,
             "%str_labels%"    : strLabels,
+            "%section%"       : srcConfig.filter_section ?? '',            
         };
         if (Array.isArray(project_notes) && project_notes.length > 0) {
             project_notes.forEach(function (value, index) {
-            mapReplaces["%project_notes_" + index + '%'] = value.content;
-            if (index == 0) mapReplaces["%project_notes%"] = value.content;
+                mapReplaces["%project_notes_" + index + '%'] = value.content;
+                if (index == 0) mapReplaces["%project_notes%"] = value.content;
             });
         } else {
             mapReplaces["%project_notes%"] = "";
@@ -545,7 +479,15 @@ class PowerTodoistCard extends LitElement {
             });
         }
 
+        // Pre-process only items whose _values_ contain a variable (e.g., %somevar% : %someothervar%)
+        for (const key in mapReplaces) {
+            if (/%[a-zA-Z0-9_-]+%/.test(mapReplaces[key])) {
+            mapReplaces[key] = replaceMultiple(mapReplaces[key], mapReplaces);
+            }
+        }
+
         myStrConfig = replaceMultiple(myStrConfig, mapReplaces);
+
         try {
              parsedConfig = JSON.parse(myStrConfig);
         } catch(err) {
@@ -570,6 +512,13 @@ class PowerTodoistCard extends LitElement {
         let state = this.hass.states[this.config.entity].attributes;
         // calling parseConfig here repeats some work, but is helpful because %user% variable and others are now available:
         let actions = this.config[button] !== undefined ? this.parseConfig(this.config[button]) : []; 
+        // actions are not executed sequentially at all. A for each could cjange this, either here or one level up at ItemAction
+        // It would not imply too many changes here. But it would complicate the aggregation of API updates into a single request
+        // actions.forEach(a => {
+        //    let actions = [a];
+        //    console.log(actions);
+        //});
+
         let automation = "", confirm = "", promptTexts = "", toast = "";
         let commands = [], updates = [], labelChanges = [], adds = [], allow = [], matches = [], emphasis = [];
         try { automation   = actions.find(a => typeof a === 'object' && a.hasOwnProperty('service')).service || "";} catch (error) { }       
@@ -685,35 +634,24 @@ class PowerTodoistCard extends LitElement {
         let default_actions = {
             "actions_close" : { 'type': 'item_close', 'uuid': this.getUUID(), 'args': {'id': item.id} },
             "actions_dbl_close": {},
-            "actions_longpress_close" : {},
-
             "actions_content" : { "type": "item_update", "uuid": this.getUUID(), "args": { "id": item.id, "content": input } },
             "actions_dbl_content" : {},
-            "actions_longpress_content" : {},
-
             "actions_description" : { "type": "item_update", "uuid": this.getUUID(), "args": { "id": item.id, "description": input } },
             "actions_dbl_description" : {},
-            "actions_longpress_description" : {},
-
             "actions_label" : {},
             "actions_dbl_label" : {},
-            "actions_longpress_label" : {},
-
             "actions_delete" : { 'type': 'item_delete', 'uuid': this.getUUID(), 'args': {'id': item.id } },
             "actions_dbl_delete" : {},
-            "actions_longpress_delete" : {},
-
             "actions_uncomplete" : { 'type': 'item_uncomplete', 'uuid': this.getUUID(), 'args': {'id': item.id } },
             "actions_dbl_uncomplete" : {},
-            "actions_longpress_uncomplete" : {},
         }
         
         // actions without arguments, and which get executed just like the defaults:
         Array.from([ "close", "uncomplete", "delete" ]). 
             forEach(a => {
-               if (actions.includes(a) && 
-                  ((a != null || a.length !== 0)))
-                  commands.push(default_actions["actions_" + a]);
+                if (actions.includes(a) && 
+                    ((a != null || a.length !== 0)))
+                    commands.push(default_actions["actions_" + a]);
         })
 
         if (!actions.length && default_actions[button]) 
@@ -723,16 +661,39 @@ class PowerTodoistCard extends LitElement {
             if (!window.confirm(confirm)) 
                 return [ [] , [] , "", "" ];
         }
+
         if (allow.length && !allow.includes(this.hass.user.name)) {
             return [ [] , [] , "", "" ];
         }
 
         // 'match' actions [field, value, action_domystuff] call other actions conditionally:
-        matches.forEach(([field, value, subActions]) => {
-            if ((Array.isArray(item[field]) && item[field].includes(value)) ||
+        if (matches.length === 1 ) matches.push='on'; // default value
+        if (matches.length === 2 ) matches.push='';     // default null action
+        if (matches.length === 3 ) matches.push='';     // default null else action
+        matches.forEach(([field, value, subAction, subElseAction]) => {
+            var stateToMatch, attrName;
+            // for HASS states such as input_booleans.allowed etc:
+            if (field.includes('.')) {
+                attrName = field.includes('#') ? field.split('#')[1] : '';
+                if (!attrName) {
+                    stateToMatch = this?.hass?.states[field.split('#')[0]]?.state || undefined;
+                } else {
+                    stateToMatch = this?.hass?.states[field.split('#')[0]]?.attributes[attrName] || undefined;
+                }
+                if ((stateToMatch === value) && subAction.length) {
+                    this.itemAction(item, subAction);
+                    //return [ [] , [] , "", "" ];
+                }
+                if ((stateToMatch !== value) && subElseAction.length) {
+                    this.itemAction(item, subElseAction);
+                    //return [ [] , [] , "", "" ];
+                }
+            }
+            // for tests against item values (todoist fields)
+            else if ((Array.isArray(item[field]) && item[field].includes(value)) ||
                 item[field] == value)
-              // we have a match, action is executed like a sub-routine:
-              this.itemAction(item, subActions);
+                // we have a match, action is executed like a sub-routine:
+                this.itemAction(item, subActions);
         })
 
         return [commands, adds, automation, toast];
@@ -743,7 +704,7 @@ class PowerTodoistCard extends LitElement {
 
         // Fetch item from hass state
         let state = this.hass.states[this.config.entity] || undefined;
-        let items = state?.attributes?.tasks || [];
+        let items = state?.attributes?.items || [];
         const itemIndex = items.findIndex(i => i.id === item.id);
         if (itemIndex === -1) return;
         let currentLabels = items[itemIndex].labels || [];
@@ -761,7 +722,7 @@ class PowerTodoistCard extends LitElement {
             ...items.slice(itemIndex + 1),
         ];
 
-        if (true) { // some extra logging for debugging 
+        if (false   ) { // some extra logging for debugging 
             const sectionIdMap = {
                 '138899413': 'Monday',
                 '138899729': 'Tuesday?',
@@ -846,54 +807,35 @@ class PowerTodoistCard extends LitElement {
 
         // deal with commands:
         this.hass.callService('rest_command', 'todoist', {
-            url: 'sync',
-            payload: 'commands=' + JSON.stringify(commands),
-        })
-        .then(response => {
-            // specific post-actions:
+                url: 'sync',
+                payload: 'commands=' + JSON.stringify(commands),
+            })
+            .then(response => {
+                // specific post-actions:
+                switch (action) {
+                    case 'close':
+                        if (this.itemsJustCompleted.length >= this.config.show_completed) 
+                           this.itemsJustCompleted.splice(0, this.itemsJustCompleted.length - this.config.show_completed + 1);
+                        this.itemsJustCompleted.push(item);
+                    break;
+                    case 'content':        
+                    break;
+                    case 'delete':
+                    break;
 
-            // Extract the actual command type from the commands array
-            const commandTypes = commands.map(cmd => cmd.type);
+                    case 'unlist_completed': // removes from internal list
+                    case 'uncomplete':       // removes from internal list and uncloses in todoist
+                        this.itemsJustCompleted = this.itemsJustCompleted.filter(v => {
+                            return v.id != item.id;
+                        });
+                    break;
 
-            // Handle UI updates based on command types, not action names
-            if (commandTypes.includes('item_close')) {
-                if (this.itemsJustCompleted.length >= this.config.show_completed) {
-                    this.itemsJustCompleted.splice(0, this.itemsJustCompleted.length - this.config.show_completed + 1);
-                }
-                this.itemsJustCompleted.push(item);
-            } else if (commandTypes.includes('item_uncomplete') || commandTypes.includes('item_delete')) {
-                this.itemsJustCompleted = this.itemsJustCompleted.filter(v => v.id != item.id);
-            }
-            /*switch (action) {
-                case 'close':
-                    if (this.itemsJustCompleted.length >= this.config.show_completed) {
-                        this.itemsJustCompleted.splice(0, this.itemsJustCompleted.length - this.config.show_completed + 1);
-                    }
-                    this.itemsJustCompleted.push(item);
-                    break;
-                case 'content':        
-                    break;
-                case 'delete':
-                    break;
-                case 'unlist_completed': // removes from internal list
-                case 'uncomplete':       // removes from internal list and uncloses in todoist
-                    this.itemsJustCompleted = this.itemsJustCompleted.filter(v => {
-                        return v.id != item.id;
-                    });
-                    break;
-                default:
-                    break;
-            }*/
+                    default:
+                  }
 
-            // Update the entity after processing the response
-            return this.hass.callService('homeassistant', 'update_entity', { 
-                entity_id: this.config.entity 
+                // note that this may execute _after_ itemAction() ends, because it runs async upon getting an API response
+                this.hass.callService('homeassistant', 'update_entity', { entity_id: this.config.entity, });
             });
-        })
-        .catch(err => {
-            console.error('Error in Todoist operation:', err);
-            throw err; // Re-throw to propagate the error
-        });
 
         // deal with automations:    
         if (automation.length) {
@@ -1039,33 +981,10 @@ class PowerTodoistCard extends LitElement {
     }
 
     getIconName(icons, baseIndex, item) {
-        // Default to base icon
-        let chosen = icons[baseIndex];
+        if ((this.myConfig.status_from_labels === undefined) || (item.statusFromLabelCriteria === undefined) || icons.length < 5)
+            return icons[baseIndex];
 
-        // If label-based override is enabled, use index 4 or 5
-        if (
-            this.config.status_from_labels !== undefined &&
-            item?.statusFromLabelCriteria !== undefined &&
-            icons.length >= 5
-        ) {
-            chosen = item.statusFromLabelCriteria ? icons[4] : icons[5];
-        }
-
-        return chosen; // { name, color }
-    }
-
-    formatDueDate(dueDate, configFormat) {
-        // Default format if none provided
-        const wantMask = configFormat || "dd-mmm H'h'MM";
-        
-        // If it's a named mask (e.g., "default", "fullDate"), resolve it
-        const resolvedMask = dateFormat.masks[wantMask] || wantMask;
-        
-        // Format the date with the resolved mask
-        const formatted = dateFormat(dueDate, resolvedMask);
-        
-        // Prepend emoji and return
-        return "🗓 " + formatted;
+        return item.statusFromLabelCriteria ? icons[4] : icons[5];
     }
 
     render() {
@@ -1074,7 +993,7 @@ class PowerTodoistCard extends LitElement {
         }
 
         let state = this.hass.states[this.config.entity] || undefined;
-        if (state?.attributes === undefined) {  
+        if (state?.attributes === undefined) {
             return html`Powertodoist sensors don't have any data yet. Please wait a few seconds and refresh. [todoist sensor] `;
         }
 
@@ -1084,32 +1003,18 @@ class PowerTodoistCard extends LitElement {
             return html`Powertodoist sensors don't have any data yet. Please wait a few seconds and refresh. [label_colors sensor] `;
         }
 
-        if (!this.hass.states["sensor.dow"] || this.hass.states['sensor.dow']?.state === "unknown") {
-            return html`Powertodoist sensors don't have any data yet. Please wait a few seconds and refresh. [days of week sensor] `;
-        }
+//        if (!this.hass.states["sensor.dow"] || this.hass.states['sensor.dow']?.state === "unknown") {
+//            return html`Powertodoist sensors don't have any data yet. Please wait a few seconds and refresh. [days of week sensor] `;
+//        }
 
         this.myConfig = this.parseConfig(this.config);
 
-        // Build icon config: support "icon" or "icon:color" form
-        var rawIcons = (this.config.icons && this.config.icons.length >= 4)
-        ? this.config.icons
-        : [
-            "checkbox-marked-circle-outline:green",
-            "circle-medium",
-            "plus-outline:blue",
-            "trash-can-outline:red",
-            "checkbox-marked-circle-outline",
-            "checkbox-blank-circle-outline"
-            ];
-
-        // Normalize into array of { name, color }
-        var icons = rawIcons.map(str => {
-            const [name, color] = str.split(":");
-            return { name, color: color || "" };
-        });
+        var icons = ((typeof this.myConfig.icons !== 'undefined') && (this.myConfig.icons.length >= 4)) 
+            ? this.myConfig.icons 
+            : ["checkbox-marked-circle-outline", "circle-medium", "plus-outline", "trash-can-outline",
+               "checkbox-marked-circle-outline", "checkbox-blank-circle-outline"]; 
         
-        let items = state.attributes.tasks || []; //changed from .items to .tasks
-        
+        let items = state.attributes.items || [];
 
         items = this.filterDates(items);
         items = this.filterPriority(items);
@@ -1117,8 +1022,8 @@ class PowerTodoistCard extends LitElement {
         // filter by section:
         let section_name2id = [];
         if (!this.myConfig.filter_section_id && this.myConfig.filter_section) {
-            //let state = this.hass.states[this.config.entity].attributes;
-            state.attributes?.sections.map(s => {
+            //let state = this.hass.states[this.myConfig.entity].attributes;
+            state.attributes.sections.map(s => {
                 section_name2id[s.name] = s.id;
             });            
         }
@@ -1128,7 +1033,7 @@ class PowerTodoistCard extends LitElement {
                 return item.section_id === section_id;
             });
         }
- 
+
         // filter items matching filter_labels criteria
         var cardLabels = [];
         items = items.filter(item => this.assessLabelCriteriaForItem.call(this, item, this.myConfig?.filter_labels, true, cardLabels));
@@ -1141,25 +1046,19 @@ class PowerTodoistCard extends LitElement {
         }));
 
         // Starts with named section or default, tries to get section name from id, but lets friendly_name override it:
-        let cardName = this.config.filter_section || "ToDoist";
+        let cardName = this.myConfig.filter_section || "ToDoist";
         try { cardName = state.attributes.sections.find(s => { return s.id === section_id }).name } catch (error) { }       
-        cardName = this.config.friendly_name || cardName;
+        cardName = this.myConfig.friendly_name || cardName;
 
-        var style = document.createElement( 'style' );
-        style.id = 'customPowerTodoistStyle';
-        try { this.shadowRoot.getElementById(style.id).remove(); } catch (error) { }       
-        if (this.config.style) {
-            style.innerHTML = this.config.style || '';
-            this.shadowRoot.appendChild(style);
-        }
+        this.generateStyles();
 
         // https://lit.dev/docs/v1/lit-html/writing-templates/#repeating-templates-with-looping-statements
 
         let rendered = html`<ha-card>
-            ${(this.config.show_header === undefined) || (this.config.show_header !== false)
+            ${(this.myConfig.show_header === undefined) || (this.myConfig.show_header !== false)
                 ? html`<h1 class="card-header">
                     <div class="name">${cardName}
-                    ${(this.config.show_card_labels === undefined) || (this.config.show_card_labels !== false)
+                    ${(this.myConfig.show_card_labels === undefined) || (this.myConfig.show_card_labels !== false)
                         ? html`${this.renderLabels(undefined, (cardLabels.length == 1 ? cardLabels : []), [], label_colors)}`
                         : html``
                     }
@@ -1167,71 +1066,57 @@ class PowerTodoistCard extends LitElement {
                     </h1>
                     <div id="powertodoist-toast">${this.toastText}</div>`
                 : html``}
-            <div class="powertodoist-list">
+            <div class="list-container">
+            <div class="left-accent"></div>
+                <div class="powertodoist-list">
                 ${items.length
                     ? items.map(item => {
-                        return html`<div class="powertodoist-item" .id=${"item_" + item.id} style="padding-left:${item.parent_id ? 32 : 0}px">
-                            ${(this.config.show_item_close === undefined) || (this.config.show_item_close !== false)
+                        return html`<div class="powertodoist-item" .id=${"item_" + item.id}>
+                            ${(this.myConfig.show_item_close === undefined) || (this.myConfig.show_item_close !== false)
                                 ? html`<ha-icon-button
                                     class="powertodoist-item-close"
-                                    @pointerdown=${(e) => this._lpStart(item, "longpress_close")}
-                                    @pointerup=${(e) => this._lpEnd(item, "close", "dbl_close")}
-                                    @pointercancel=${this._lpCancel}
-                                    @pointerleave=${this._lpCancel} >
-                                    <ha-icon
-                                        .icon=${"mdi:" + this.getIconName(icons, 0, item).name}
-                                        style="color:${this.getIconName(icons, 0, item).color}"
-                                    ></ha-icon>
+                                    @click=${() => this.itemAction(item, "close")} 
+                                    @dblclick=${() => this.itemAction(item, "dbl_close")} >
+                                    <ha-icon .icon=${"mdi:" + this.getIconName(icons, 0, item)}></ha-icon>
                                 </ha-icon-button>`
-                                : html`<ha-icon 
-                                        .icon=${"mdi:" + icons[1].name} 
-                                        style=${icons[1].color ? `color:${icons[1].color};` : ""}
-                                    ></ha-icon>` 
+                                : html`<ha-icon .icon=${"mdi:" + icons[1]}></ha-icon>` 
                             }
                             <div class="powertodoist-item-text"><div 
-                                @pointerdown=${(e) => this._lpStart(item, "longpress_content")}
-                                @pointerup=${(e) => this._lpEnd(item, "content", "dbl_content")}
-                                @pointercancel=${this._lpCancel}
-                                @pointerleave=${this._lpCancel}
+                                @click=${() => this.itemAction(item, "content")} 
+                                @dblclick=${() => this.itemAction(item, "dbl_content")}
                             ><span class="powertodoist-item-content ${(this.itemsEmphasized[item.id]) ? css`powertodoist-special` : css``}" >
                             ${item.content}</span></div>
-                            ${(this.config.show_item_description === undefined) || (this.config.show_item_description !== false) && item.description
+                            ${(this.myConfig.show_item_description === undefined) || (this.myConfig.show_item_description !== false) && item.description
                                 ? html`<div
-                                    @pointerdown=${(e) => this._lpStart(item, "longpress_description")}
-                                    @pointerup=${(e) => this._lpEnd(item, "description", "dbl_description")}
-                                    @pointercancel=${this._lpCancel}
-                                    @pointerleave=${this._lpCancel}
+                                    @click=${() => this.itemAction(item, "description")} 
+                                    @dblclick=${() => this.itemAction(item, "dbl_description")}   
                                 ><span class="powertodoist-item-description">${item.description}</span></div>`
-                                : html`` }        
+                                : html`` }
                             ${this.renderLabels(
                                 item, 
-                                this.myConfig.show_dates && item.due
-                                    ? this.formatDueDate(item.due.date, this.config.date_format)
-                                    : [],
+                                this.myConfig.show_dates && item.due ? dateFormat(item.due.date, "🗓 dd-mmm H'h'MM") : [],
                                 [...item.labels].filter(String),
+//                                    [this.myConfig.show_dates && item.due ? dateFormat(item.due.date, "🗓 dd-mmm H'h'MM") : 
+//                                    [], ...item.labels].filter(String), // filter removes the empty []s
                                 // exclusions:
                                 [...(cardLabels.length == 1 ? cardLabels : []), // card labels excluded unless more than one
                                 ...item.labels.filter(l => l.startsWith("_"))], // "_etc" labels excluded
                                 label_colors) }
                         </div>
-                        ${(this.config.show_item_delete === undefined) || (this.config.show_item_delete !== false)
+                        ${(this.myConfig.show_item_delete === undefined) || (this.myConfig.show_item_delete !== false)
                             ? html`<ha-icon-button
                                 class="powertodoist-item-delete"
-                                @pointerdown=${(e) => this._lpStart(item, "longpress_delete")}
-                                @pointerup=${(e) => this._lpEnd(item, "delete", "dbl_delete")}
-                                @pointercancel=${this._lpCancel}
-                                @pointerleave=${this._lpCancel} >
-                                <ha-icon 
-                                    .icon=${"mdi:" + icons[3].name} 
-                                    style=${icons[3].color ? `color:${icons[3].color};` : ""}
-                                ></ha-icon>
+                                @click=${() => this.itemAction(item, "delete")} 
+                                @dblclick=${() => this.itemAction(item, "dbl_delete")} >
+                                <ha-icon .icon=${"mdi:" + icons[3]}></ha-icon>
                             </ha-icon-button>`
                             : html``}    
                         </div>
                     </div>`;
                     })
-                    : html`<div class="powertodoist-list-empty">No tasks to do!</div>`}
+                    : html`<div class="powertodoist-list-empty">No uncompleted tasks!</div>`}
                 ${this.renderLowerPart(icons)}
+                </div>
             </div>
             ${this.renderFooter()}
             </ha-card>`;
@@ -1239,6 +1124,21 @@ class PowerTodoistCard extends LitElement {
         return rendered;
     }
     
+    generateStyles() {
+        var style = document.createElement('style');
+        style.id = 'customPowerTodoistStyle';
+        try { this.shadowRoot.getElementById(style.id).remove(); } catch (error) { }
+
+        if (this.myConfig.accent) {
+            this.myConfig.style = (this.myConfig.style ?? '') + '.left-accent { background-color: ' + this.myConfig.accent + '!important; width: 6px!important; }';
+        }
+
+        if (this.myConfig.style) {
+            style.innerHTML = this.myConfig.style || '';
+            this.shadowRoot.appendChild(style);
+        }
+    }
+
     generateExtraLabels (labels, label_colors) {
         if (label_colors === undefined) return [];
         var extraLabels = [];
@@ -1285,15 +1185,15 @@ class PowerTodoistCard extends LitElement {
         return extraLabels;
     }
 
-    renderLabels(item, date, labels, exclusions, label_colors) {
+    renderLabels(item, dates, labels, exclusions, label_colors) {
 
         var extraLabels = this.generateExtraLabels(labels, label_colors);
 
-        labels = [date, ...labels, ...extraLabels].filter(String);
+        labels = labels.concat(extraLabels);
 
         // prepend a date as a "fake" label:
-        if ((item !== undefined) && (this.config.show_item_labels === false)) {
-            labels = this.myConfig.show_dates && item.due ? [date, ...extraLabels] : [...extraLabels];
+        if ((item !== undefined) && (this.myConfig.show_item_labels === false)) {
+            labels = this.myConfig.show_dates && item.due ? [dates, ...extraLabels] : [...extraLabels];
         }        
         
         let rendered = html`
@@ -1313,10 +1213,8 @@ class PowerTodoistCard extends LitElement {
                 return html`<li 
                     class=${extraLabels.includes(label) ? "extraLabel" : ""}
                     .style=${style}
-                    @pointerdown=${(e) => this._lpStart(item, "longpress_label")}
-                    @pointerup=${(e) => this._lpEnd(item, "label", "dbl_label")}
-                    @pointercancel=${this._lpCancel}
-                    @pointerleave=${this._lpCancel}
+                    @click=${() => this.itemAction(item, "label")}
+                    @dblclick=${() => this.itemAction(item, "dbl_label")}
                     >
                     <span>${displayLabel}</span></li>`;
             })}</ul></div>` 
@@ -1328,56 +1226,41 @@ class PowerTodoistCard extends LitElement {
     renderLowerPart(icons) {
         // this is the grey area below where the recently completed items appear, so they can be uncompleted
         let rendered = html`
-        ${this.config.show_completed && this.itemsJustCompleted
+        ${this.myConfig.show_completed && this.itemsJustCompleted
             ? this.itemsJustCompleted.map(item => {
                     return html`<div class="powertodoist-item todoist-item-completed">
-                        ${(this.config.show_item_close === undefined) || (this.config.show_item_close !== false)
+                        ${(this.myConfig.show_item_close === undefined) || (this.myConfig.show_item_close !== false)
                             ? html`<ha-icon-button
                                 class="powertodoist-item-close"
-                                @pointerdown=${(e) => this._lpStart(item, "longpress_uncomplete")}
-                                @pointerup=${(e) => this._lpEnd(item, "uncomplete", "dbl_uncomplete")}
-                                @pointercancel=${this._lpCancel}
-                                @pointerleave=${this._lpCancel} >
-                                <ha-icon 
-                                    .icon=${"mdi:" + icons[2].name} 
-                                    style=${icons[2].color ? `color:${icons[2].color};` : ""}
-                                ></ha-icon>
+                                @click=${() => this.itemAction(item, "uncomplete")} 
+                                @dblclick=${() => this.itemAction(item, "dbl_uncomplete")} >
+                                <ha-icon .icon=${"mdi:" + icons[2]}></ha-icon>
                             </ha-icon-button>`
-                            : html`<ha-icon 
-                                        .icon=${"mdi:" + icons[0].name} 
-                                        style=${icons[0].color ? `color:${icons[0].color};` : ""}
-                                    ></ha-icon>`
-                        }
+                            : html`<ha-icon .icon=${"mdi:" + icons[0]} ></ha-icon>`}
                         <div class="powertodoist-item-text">
                             ${item.description
                                 ? html`<span class="powertodoist-item-content">${item.content}</span>
                                     <span class="powertodoist-item-description">${item.description}</span>`
                                 : item.content}
                         </div>
-                        ${(this.config.show_item_delete === undefined) || (this.config.show_item_delete !== false)
+                        ${(this.myConfig.show_item_delete === undefined) || (this.myConfig.show_item_delete !== false)
                             ? html`<ha-icon-button
                                 class="powertodoist-item-delete"
-                                @pointerdown=${(e) => this._lpStart(item, "longpress_unlist_completed")}
-                                @pointerup=${(e) => this._lpEnd(item, "unlist_completed", "dbl_unlist_completed")}
-                                @pointercancel=${this._lpCancel}
-                                @pointerleave=${this._lpCancel}
-                                >
-                                <ha-icon 
-                                    .icon=${"mdi:" + icons[3].name} 
-                                    style=${icons[3].color ? `color:${icons[3].color};` : ""}
-                                ></ha-icon>
+                                @click=${() => this.itemAction(item, "unlist_completed")} 
+                                @dblclick=${() => this.itemAction(item, "dbl_unlist_completed")} >
+                                <ha-icon .icon=${"mdi:" + icons[3]}></ha-icon>
                             </ha-icon-button>`
                             : html``}
                     </div>`;
                 })
-            : html`TEMP: nothing to undelete`}
+            : html``}
         `;
         return rendered;
     }
 
     renderFooter() {
         let rendered = html`
-            ${(this.config.show_item_add === undefined) || (this.config.show_item_add !== false)
+            ${(this.myConfig.show_item_add === undefined) || (this.myConfig.show_item_add !== false)
             ? html`<input
             id="powertodoist-card-item-add"
             type="text"
@@ -1388,9 +1271,9 @@ class PowerTodoistCard extends LitElement {
         />`
         : html``}
         `;
-        if (this.config.error) {
-            this.showToast(this.config.error, 15000, 3000);
-            delete this.config.error;
+        if (this.myConfig.error) {
+            this.showToast(this.myConfig.error, 15000, 3000);
+            delete this.myConfig.error;
         }
         return rendered;
     }
@@ -1403,9 +1286,27 @@ class PowerTodoistCard extends LitElement {
             
             .powertodoist-list {
                 display: flex;
-                flex-direction: column;
                 padding: 15px;
+                flex-direction: column;
+                flex: 1; /* (For left accent: list takes remaining space */
             }
+
+            .list-container {
+                display: flex; /* place the accent and list side by side */
+            }
+
+            .left-accent {
+                width: 0px; /* Accent width, starts collapsed to hide */
+                background-color: #ff0000; /* Accent color */
+                border-radius: 3px; /* Rounded corners */
+                margin-right: 1px; /* Space between accent and list */
+            }
+
+            /* affects child items:
+            .powertodoist-list > * {
+                border-left: 3px solid #ff0000;
+            }
+            */
             
             .powertodoist-list-empty {
                 padding: 15px;
@@ -1523,6 +1424,7 @@ class PowerTodoistCard extends LitElement {
                 border-left: 1px dotted white;
                 outline: none;
             }
+
             #powertodoist-toast {
                 position: relative;
                 bottom: 20px;
@@ -1538,7 +1440,7 @@ class PowerTodoistCard extends LitElement {
                 display: none;
                 text-align: center;
                 margin: 15px 35px -30px 45px
-              }
+            }
             .labelsDiv{
                 display: inline-flex;
             }
@@ -1549,7 +1451,7 @@ class PowerTodoistCard extends LitElement {
             } 
             */
 
-        `;
+    `;
     }
 }
 
