@@ -1,4 +1,4 @@
-# PowerTodoi   t Card
+# PowerTodoist Card
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
 ![hacs_badge](https://img.shields.io/github/v/release/pgorod/power-todoist-card)
@@ -318,6 +318,7 @@ That was a lot of work 😅! If you enjoy and use this card, I'd appreciate it i
 [![](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/pgorod)
 
 Note that you pick a one-time amount and select any value you want.
+
 
 
 
