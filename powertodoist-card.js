@@ -481,7 +481,7 @@ class PowerTodoistCard extends LitElement {
         let date_formatted = (new Date()).format(this.myConfig["date_format"] || "mmm dd H:mm");
 // let date_formatted = (new Date()).format(srcConfig["date_format"] || "mmm dd H:mm");
         //try { project_notes = this.hass.states[this.config.entity].attributes['project_notes'];} catch (error) { }
-        try { project_notes = this.hass.states['sensor.comments_sensor'].attributes['results'];} catch (error) { } //api switch
+        try { project_notes = this.hass.states[this.myConfig.comments_entity].attributes['results'];} catch (error) { } //api switch
         const strLabels = (typeof(item) !== "undefined" && item.labels) ? JSON.stringify(item.labels) : "";
         var mapReplaces = {
             "%user%" : this.hass ? this.hass.user.name : "",
