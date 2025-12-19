@@ -39,36 +39,54 @@ This card can be configured using Lovelace UI editor.
 1. Add the following code to `configuration.yaml`:
     ```yaml
     sensor:
-      - name: To-do List
+      # Full project (v1 /projects/<id>/full)
+      # Link this name in the card(s) as... entity: sensor.main_sensor_name
+      - name: main_sensor_name
         platform: rest
+        unique_id: main_sensor_name
         method: GET
-        resource: 'https://api.todoist.com/sync/v9/projects/get_data'
-        params:
-          project_id: TODOIST_PROJECT_ID
+        resource: "https://api.todoist.com/api/v1/projects/TODOIST_PROJECT_ID/full"
         headers:
-          Authorization: !secret todoist_api_token
-        value_template: '{{ value_json[''project''][''id''] }}'
+          Authorization: !secret todoist_api_token     # must include "Bearer <token>" inside the secret
+          Accept: application/json
+        value_template: "{{ value_json.project.id }}"
         json_attributes:
           - project
-          - items
+          - tasks
           - sections
-          - project_notes
         scan_interval: 30
-        
-    command_line:
-      - sensor:
-          name: label_colors
-          command: !secret todoist_cmd_with_api_token
-          value_template: >
-            {{ value_json.label_colors | length }}
+
+        # Project comments (formerly project_notes)
+        # Link this name in the card(s) as... comments_entity: sensor.comments_sensor
+        - name: comments_sensor
+          platform: rest
+          unique_id: comments_sensor
+          method: GET
+          resource: "https://api.todoist.com/api/v1/comments"
+          params:
+            project_id: "TODOIST_PROJECT_ID"
+          headers:
+            Authorization: !secret todoist_api_token
+            Accept: application/json
+          value_template: "{{ value_json.results | length }}"
           json_attributes:
-            - label_colors
-          scan_interval: 200
+            - results
+          scan_interval: 10
+
+   command_line:
+     - sensor:
+         name: label_colors
+         command: !secret todoist_cmd_with_api_token
+         value_template: >
+           {{ value_json.label_colors | length }}
+         json_attributes:
+           - label_colors
+         scan_interval: 200
 
     rest_command:
       todoist:
         method: post
-        url: 'https://api.todoist.com/sync/v9/{{ url }}'
+        url: 'https://api.todoist.com/api/v1/{{ url }}'
         payload: '{{ payload }}'
         headers:
           Authorization: !secret todoist_api_token
@@ -76,14 +94,19 @@ This card can be configured using Lovelace UI editor.
     ```
     👉 The REST command and the `label_colors` sensor are constant and need to be defined only once for each Todoist account used (I recommend using only one and handling any content separation with cleverly filtered projects, sections, and labels).
     
-    👉 The Sensor definition, on the other hand, can be cloned to allow for different projects, just make sure you set a unique entity name, and set the appropriate `TODOIST_PROJECT_ID` for each one (see below).
+    👉 The Sensor definitions, on the other hand, can be cloned to allow for different projects, just make sure you set unique entity names, and set the appropriate `TODOIST_PROJECT_ID` for each one (see below).
 2. In that `configuration.yaml`, replace `TODOIST_PROJECT_ID` with ID of your selected Todoist project.
     > You can get `TODOIST_PROJECT_ID` from project URL after logging in to your Todoist account in a browser. It usually looks like this:
           `https://todoist.com/app/project/**TODOIST_PROJECT_ID**` or `https://todoist.com/app/project/name_of_project-**TODOIST_PROJECT_ID**`
 3. Add this to `secrets.yaml`:
     ```yaml
     todoist_api_token: 'Bearer TODOIST_API_TOKEN'
-    todoist_cmd_with_api_token: 'echo "{\"label_colors\":" $(curl -s https://api.todoist.com/rest/v2/labels -H "Accept: application/json" -H "Authorization: Bearer TODOIST_API_TOKEN") "}" '
+    todoist_cmd_with_api_token: >
+      printf '{"label_colors":%s}\n' "$(
+        curl -s https://api.todoist.com/api/v1/labels \
+          -H 'Authorization: Bearer TODOIST_API_TOKEN' \
+          -H 'Accept: application/json' | jq '.results'
+      )"
     ```
 4. In that `secrets.yaml`, replace two instances of `TODOIST_API_TOKEN` with your private [API Token](https://todoist.com/prefs/integrations) (click `Developer` tab on that page).
 5. Reload configs or restart Home Assistant.
@@ -322,6 +345,7 @@ That was a lot of work 😅! If you enjoy and use this card, I'd appreciate it i
 [![](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/pgorod)
 
 Note that you pick a one-time amount and select any value you want.
+
 
 
 
