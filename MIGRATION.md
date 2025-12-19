@@ -1,4 +1,4 @@
-# Powertodoist Migration from API v9/v2 to v1
+# PowerTodoist Migration from API v9/v2 to v1
 
 The Todoist API has changed from v9/v2 to v1. Here are the necessary alterations to handle this migration:
 
