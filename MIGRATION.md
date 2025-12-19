@@ -14,9 +14,14 @@ todoist_cmd_with_api_token: >
     )"
 ```
 
+Remember to replace that `TODOIST_API_TOKEN` with your actual secret token. 
+You can check the main README for detailed instructions on how to get it; but if you're really migrating, 
+you already have it in your `secrets.yaml` file.
+
 ## 2. Changes in `sensors.yaml`
 
 Project notes (now project comments) no longer come with the GET request for project data. A second sensor is now required to capture project comments.
+I'm afraid you must add this new sensor even if you don't plan to use Project notes, because the card is expecting it to be there.
 
 ### Main Project Sensor
 ```yaml
