@@ -32,13 +32,13 @@ I'm afraid you must add this new sensor even if you don't plan to use Project no
   method: GET
   resource: "https://api.todoist.com/api/v1/projects/TODOIST_PROJECT_ID/full"
   headers:
-      Authorization: !secret todoist_api_token     # must include "Bearer <token>" inside the secret
-      Accept: application/json
+    Authorization: !secret todoist_api_token     # must include "Bearer <token>" inside the secret
+    Accept: application/json
   value_template: "{{ value_json.project.id }}"
   json_attributes:
-      - project
-      - tasks
-      - sections
+    - project
+    - tasks
+    - sections
   scan_interval: 10
 ```
 
@@ -66,13 +66,13 @@ I'm afraid you must add this new sensor even if you don't plan to use Project no
 ### Update REST Command URL
 ```yaml
 rest_command:
-    todoist:
-        method: post
-        url: 'https://api.todoist.com/api/v1/{{ url }}'
-        payload: '{{ payload }}'
-        headers:
-            Authorization: !secret todoist_api_token
-            content_type: 'application/x-www-form-urlencoded'
+  todoist:
+    method: post
+    url: 'https://api.todoist.com/api/v1/{{ url }}'
+    payload: '{{ payload }}'
+    headers:
+      Authorization: !secret todoist_api_token
+    content_type: 'application/x-www-form-urlencoded'
 ```
 
 ## 4. Add Comments Entity to Card Configuration
