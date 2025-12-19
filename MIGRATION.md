@@ -7,11 +7,12 @@ The Todoist API has changed from v9/v2 to v1. Here are the necessary alterations
 Updated `todoist_cmd_with_api_token`:
 ```yaml
 todoist_cmd_with_api_token: >
-    printf '{"label_colors":%s}\n' "$(
-        curl -s https://api.todoist.com/api/v1/labels \
-            -H 'Authorization: Bearer TODOIST_API_TOKEN' \
-            -H 'Accept: application/json' | jq '.results'
-    )"
+  printf '{"label_colors":%s}\n' "$(
+    curl -s https://api.todoist.com/api/v1/labels \
+      -H 'Authorization: Bearer TODOIST_API_TOKEN' \
+      -H 'Accept: application/json' | jq '.results'
+  )"
+
 ```
 
 Remember to replace that `TODOIST_API_TOKEN` with your actual secret token. 
