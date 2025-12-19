@@ -75,7 +75,13 @@ rest_command:
             content_type: 'application/x-www-form-urlencoded'
 ```
 
-### Add Comments Entity to Card Configuration
+## 4. Add Comments Entity to Card Configuration
 ```yaml
 comments_entity: 'sensor.your_comments_sensor_unique_id'
 ```
+
+## 5. Test the sensors separately from the card❗
+
+1. Restart Home Assistant after making the above changes.
+2. Go to `Developer Tools` / `States` and try accessing your new sensors. You should see your data there. If it's not, fix the sensor definitions and restart and wait a minute or so for the data to appear.
+3. Only after you see your data in the sensors, check that your card is showing the data as intended on the dashboards.
