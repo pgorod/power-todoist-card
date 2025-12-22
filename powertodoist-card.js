@@ -1247,7 +1247,7 @@ class PowerTodoistCard extends LitElement {
                                 @pointerleave=${this._lpCancel}
                             ><span class="powertodoist-item-content ${(this.itemsEmphasized[item.id]) ? css`powertodoist-special` : css``}" >
                             ${item.content}</span></div>
-                            ${(this.myConfig.show_item_description === undefined) || (this.myConfig.show_item_description !== false) && item.description
+                            ${((this.myConfig.show_item_description === undefined) || (this.myConfig.show_item_description !== false)) && item.description
                             ? html`<div
                                     @pointerdown=${(e) => this._lpStart(item, "longpress_description")}
                                     @pointerup=${(e) => this._lpEnd(item, "description", "dbl_description")}
@@ -1778,3 +1778,4 @@ dateFormat.i18n = {
 Date.prototype.format = function (mask, utc) {
     return dateFormat(this, mask, utc);
 };
+
