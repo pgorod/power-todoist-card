@@ -156,10 +156,9 @@ Spaces and hyphens turned into `_`, and everything became lowercase. In case of 
 | `date_format` | `string` | `dd-mmm HHhmm ` | Defines date format. This affects two things: how item dates are displayed and how date variables are substituted. <br>Complete formatting options are documented [here](https://blog.stevenlevithan.com/archives/javascript-date-format). |
 | `extra_labels`          | `list` | `(none)`      | 🆕 Adds "virtual" labels that appear in the card, but don't exist in Todoist at all. You can use a simple static label like `- "Hi"`. But the real use for this comes when you use a label in the format: `title: label1+label2+label3`. This will show the title as is, followed by a list of the real labels from that list that are present in the item. If you add a plus at the beginning of the list `title: +label1+label2+label3` it will show a count of how many of the labels from the list are present in the item. See the house meal counts example below. |
 | `status_from_labels`    | `list` | `(none)`      | 🆕 Use a list of label criteria similar to the **Filtering by Labels** section (detailed below). This will evaluate to `true` or `false` for each item. It will affect the icon displayed for the status of the item (checked/unchecked) so you can manage this with labels instead of the actual Todoist completion. If `true` the 5th icon of `icons` configuration is used, if `false` then the 6th icon is used - if these icons are defined. |
-| `style`                 | `string` | `(none)`      | 🆕 Adds a CSS style to the card so you can tweak the appearance.    |
-| **`emphasis`**     | 🆕 **Temporarily** adds a CSS class to the item to create a "flash" impression for 3 seconds. For example, **`emphasis: special`** will add a CSS class called **`powertodoist-special`**. This class is defined in the card's code, but you can override the visuals using the `style` option. |
-| `accent`           | `string` | `(none)`      | 🆕 A CSS color to be applied on the left border of the whole card. This is meant as a way to differentiate several PowerTodoist cards 
-if you have several.   |
+| `style`                 | `string` | `(none)`    | 🆕 Adds a CSS style to the card so you can tweak the appearance.    |
+| **`emphasis`**          | `string` | `(none)`    | 🆕 **Temporarily** adds a CSS class to the item to create a "flash" impression for 3 seconds. For example, **`emphasis: special`** will add a CSS class called **`powertodoist-special`**. This class is defined in the card's code, but you can override the visuals using the `style` option. |
+| `accent`                | `string` | `(none)`    | 🆕 A CSS color to be applied on the left border of the whole card. This is meant as a way to differentiate several PowerTodoist cards if you have several.   |
 
 > Note that the completed tasks list is cleared when the page is refreshed.
 
@@ -345,6 +344,7 @@ That was a lot of work 😅! If you enjoy and use this card, I'd appreciate it i
 [![](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/pgorod)
 
 Note that you pick a one-time amount and select any value you want.
+
 
 
 
