@@ -35,7 +35,7 @@ I'm afraid you must add this new sensor even if you don't plan to use Project no
   headers:
     Authorization: !secret todoist_api_token     # must include "Bearer <token>" inside the secret
     Accept: application/json
-  value_template: "{{ value_json.project.id }}"
+  value_template: "{{ value_json['project']['id'] }}"
   json_attributes:
     - project
     - tasks
