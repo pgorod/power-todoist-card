@@ -802,11 +802,12 @@ class PowerTodoistCard extends LitElement {
     async processAdds(adds) {
         for (const item of adds) {
             this.hass.callService('rest_command', 'todoist', {
-                url: 'quick/add',
+                url: 'tasks/quick',
                 payload: 'text=' + item,
             });
         }
     }
+
     // Usually this is triggered by UI event handlers: click, dbl_click, etc
     // But also via 'match' actions
     itemAction(item, action) {
@@ -1506,19 +1507,25 @@ class PowerTodoistCard extends LitElement {
                 /* border: 1px solid red; border-width: 1px 1px 1px 1px; */
                 color: #808080;
             }
-           
+
+            .powertodoist-item-text {
+                flex: 1;
+                min-width: 0;
+            }
+
             .powertodoist-item-text, .powertodoist-item-text > span, .powertodoist-item-text > div {
                 font-size: 16px;
-                white-space: nowrap;
+                white-space: normal;
+                word-break: break-word;
+                overflow-wrap: break-word;
+                /* Remove these:
                 overflow: hidden;
-                text-overflow: ellipsis;
-                /* border: 1px solid green; border-width: 1px 1px 1px 1px; */
+                text-overflow: ellipsis; */
             }
 
             .powertodoist-item-content {
                 display: block;
                 margin: -6px 0 -6px;
-                /* border: 1px solid red; border-width: 1px 1px 1px 1px; */
             }
 
             .powertodoist-item-description {
@@ -1527,8 +1534,6 @@ class PowerTodoistCard extends LitElement {
                 font-size: 12px !important;
                 line-height: 1.2 !important;
                 margin: 0;
-                overflow-wrap: break-word;
-                white-space: normal;
             }
            
             .powertodoist-item-close {
