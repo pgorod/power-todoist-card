@@ -668,11 +668,31 @@ class TodoistCardV2 extends LitElement {
         }
     }
 
-    // Get API token from card config
+    // Get API token - tries multiple sources
     getApiToken() {
-        // Token must be provided in card config as api_token
-        // This is required for comments feature
-        return this.config.api_token || null;
+        // 1. From card config (api_token: "xxx")
+        if (this.config.api_token) {
+            return this.config.api_token;
+        }
+
+        // 2. From a dedicated sensor that exposes the token
+        // User can create: sensor.todoist_token with state = token
+        if (this.hass?.states?.['sensor.todoist_token']?.state) {
+            const token = this.hass.states['sensor.todoist_token'].state;
+            if (token && token !== 'unknown' && token !== 'unavailable') {
+                return token;
+            }
+        }
+
+        // 3. From input_text helper (input_text.todoist_api_token)
+        if (this.hass?.states?.['input_text.todoist_api_token']?.state) {
+            const token = this.hass.states['input_text.todoist_api_token'].state;
+            if (token && token !== 'unknown' && token !== 'unavailable') {
+                return token;
+            }
+        }
+
+        return null;
     }
 
     // Set task duration
