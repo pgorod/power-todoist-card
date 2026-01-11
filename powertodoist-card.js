@@ -668,11 +668,11 @@ class TodoistCardV2 extends LitElement {
         }
     }
 
-    // Get API token from secrets (stored in sensor command)
+    // Get API token from card config
     getApiToken() {
-        // Try to get from label_colors sensor command (it has the token hardcoded)
-        // This is a workaround - ideally should be configurable
-        return 'f12e0fd01aea0907b827f1e356a85b13a2cfe58f';
+        // Token must be provided in card config as api_token
+        // This is required for comments feature
+        return this.config.api_token || null;
     }
 
     // Set task duration
@@ -804,10 +804,11 @@ class TodoistCardV2 extends LitElement {
                                 qa = qa + ' #' + state.attributes.project.name.replaceAll(' ', '\\ ');
                         } catch (error) { }
 
-                        // Use todoist_quick_add rest_command for v2
+                        // Use todoist rest_command with quick add endpoint
                         this.hass
-                            .callService('rest_command', 'todoist_quick_add', {
-                                text: qa,
+                            .callService('rest_command', 'todoist', {
+                                url: 'tasks/quick',
+                                payload: JSON.stringify({ text: qa }),
                             })
                             .then(response => {
                                 input.value = '';
@@ -1085,8 +1086,9 @@ class TodoistCardV2 extends LitElement {
 
     async processAdds(adds) {
         for (const item of adds) {
-            this.hass.callService('rest_command', 'todoist_quick_add', {
-                text: item,
+            this.hass.callService('rest_command', 'todoist', {
+                url: 'tasks/quick',
+                payload: JSON.stringify({ text: item }),
             });
         }
     }
@@ -1120,9 +1122,14 @@ class TodoistCardV2 extends LitElement {
                 console.error('Error closing task:', err);
             });
         } else if (commandTypes.includes('item_delete')) {
-            // Use REST API v2 delete
-            this.hass.callService('rest_command', 'todoist_delete', {
-                task_id: item.id,
+            // Use Sync API for delete
+            this.hass.callService('rest_command', 'todoist', {
+                url: 'sync',
+                payload: 'commands=' + JSON.stringify([{
+                    type: 'item_delete',
+                    uuid: this.getUUID(),
+                    args: { id: item.id }
+                }]),
             }).then(response => {
                 this.itemsJustCompleted = this.itemsJustCompleted.filter(v => v.id != item.id);
                 return this.hass.callService('homeassistant', 'update_entity', {
