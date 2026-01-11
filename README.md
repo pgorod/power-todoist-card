@@ -159,6 +159,10 @@ Spaces and hyphens turned into `_`, and everything became lowercase. In case of 
 | `style`                 | `string` | `(none)`    | 🆕 Adds a CSS style to the card so you can tweak the appearance.    |
 | **`emphasis`**          | `string` | `(none)`    | 🆕 **Temporarily** adds a CSS class to the item to create a "flash" impression for 3 seconds. For example, **`emphasis: special`** will add a CSS class called **`powertodoist-special`**. This class is defined in the card's code, but you can override the visuals using the `style` option. |
 | `accent`                | `string` | `(none)`    | 🆕 A CSS color to be applied on the left border of the whole card. This is meant as a way to differentiate several PowerTodoist cards if you have several.   |
+| `show_subtasks`         | `boolean` | `true`       | 🆕 Enable subtask hierarchy display. |
+| `collapse_subtasks`     | `boolean` | `false`      | 🆕 Start with subtasks collapsed. |
+| `sort_by_priority`      | `boolean` | `false`      | 🆕 Sort tasks by priority (P1 first). |
+| `api_token`             | `string` | `(none)`     | 🆕 Todoist API token for comments feature. Can also use `input_text.todoist_api_token` or `sensor.todoist_token`. |
 
 > Note that the completed tasks list is cleared when the page is refreshed.
 
@@ -285,7 +289,59 @@ Let me know if you have other ideas for variables that could prove useful.
 
 ## Sub-tasks
 
- We have a very, very partial implementation. If a task is a sub-task, then it appears indented under the task above it. That's it, nothing else. But you are responsible for making sure that the "task above it" is actually its parent task. This involves things like filtering and sorting. Sorry, but a proper implementation would be very complex and would involve a rewrite of all our code.
+🆕 **Full subtask hierarchy is now supported!** Tasks with subtasks are displayed in a nested tree structure, with expand/collapse controls.
+
+| Name                    |   Type    |   Default    | Description     |
+| ----------------------- | :-------: | :----------: | ------------------------------------------------------------------ |
+| `show_subtasks`         | `boolean` | `true`       | 🆕 Enable subtask hierarchy display. Subtasks will be nested under their parent tasks. |
+| `collapse_subtasks`     | `boolean` | `false`      | 🆕 Start with subtasks collapsed. Users can expand/collapse by clicking the arrow. |
+
+Subtasks are identified using the `parent_id` field from the Todoist API. The card builds a proper tree structure, showing:
+- Expand/collapse arrows on parent tasks
+- Indented subtasks with visual hierarchy
+- Subtask count indicators (e.g., "2/5" showing completed/total)
+
+## Task Detail Popup 🆕
+
+Click on any task to open a detailed popup with rich editing capabilities:
+
+| Feature | Description |
+| ------- | ----------- |
+| **Inline Title Editing** | Click the title to edit it directly |
+| **Description Editor** | Add or edit task descriptions |
+| **Subtasks Section** | View subtasks with progress counter, add new subtasks |
+| **Due Date Picker** | Quick buttons for Today, Tomorrow, or pick a custom date |
+| **Duration Picker** | Set estimated task duration (15m, 30m, 45m, 1h, 1h30, 2h, 3h) |
+| **Priority Selector** | Visual P1-P4 flags to change task priority |
+| **Labels Editor** | Toggle labels with checkboxes |
+| **Comments Section** | View and add comments to tasks (requires `api_token` config) |
+| **Recurring Indicator** | Shows if task repeats |
+
+### Priority Colors 🆕
+
+Tasks are color-coded by priority:
+- **P1** (Priority 4 in API): 🔴 Red - Urgent
+- **P2** (Priority 3 in API): 🟠 Orange - High
+- **P3** (Priority 2 in API): 🔵 Blue - Medium
+- **P4** (Priority 1 in API): ⚪ Grey - Low
+
+| Name                    |   Type    |   Default    | Description     |
+| ----------------------- | :-------: | :----------: | ------------------------------------------------------------------ |
+| `sort_by_priority`      | `boolean` | `false`      | 🆕 Sort tasks by priority (P1 first). |
+
+### Comments Feature 🆕
+
+To enable the comments feature in the task detail popup, you need to provide your API token:
+
+```yaml
+type: custom:powertodoist-card
+entity: sensor.todoist_inbox
+api_token: "your_todoist_api_token_here"  # Without "Bearer " prefix!
+```
+
+Alternatively, create an `input_text` helper called `input_text.todoist_api_token` or a sensor `sensor.todoist_token` with the token as its state.
+
+> ⚠️ **Security note:** The `api_token` in card config is visible in your dashboard YAML. For better security, use the input_text or sensor method.
 
 
 ## Learn by example
