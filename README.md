@@ -149,7 +149,7 @@ Spaces and hyphens turned into `_`, and everything became lowercase. In case of 
 | `friendly_name`         | `string`  | `Todoist`    | The card name shown on top uses a somewhat elaborate logic: <br>the default is `Todoist`, if no name is specified. <br>But if a Section filter is specified, then that section name will be used instead. <br>Finally, if you do use the `friendly_name` option, it will override anything else.  |
 | `icons`                 | `list` | ![image](https://github.com/pgorod/power-todoist-card/assets/15945027/793f8b01-4203-4e5a-81e1-785bb1d284a3) <br> ![image](https://github.com/pgorod/power-todoist-card/assets/15945027/2753b1ac-8e5a-42d7-b39d-6b30fb8fea2c) <br> ![image](https://github.com/pgorod/power-todoist-card/assets/15945027/5714d361-376b-4666-9ebf-a7611b13d0d4) <br> ![image](https://github.com/pgorod/power-todoist-card/assets/15945027/cc682901-ca9b-43e7-b1ba-e7eb276f66b4) <br><br> ![image](https://github.com/pgorod/power-todoist-card/assets/15945027/793f8b01-4203-4e5a-81e1-785bb1d284a3) <br> <img width="19" height="20" alt="image" src="https://github.com/user-attachments/assets/caa5165c-790a-416b-86d2-486cc51739a3" /> | A list of 4 (or 6) icon names from the [MDI Library](https://pictogrammers.com/library/mdi/), without the `mdi:`prefix. Icons will be used for the check mark of checkable items, the bullet of uncheckable items, the plus sign to add items, and the trash can to delete. The two optional additional icons are for `status_from_labels`.🆕 <br>Defaults as shown are `["checkbox-marked-circle-outline", "circle-medium", "plus-outline", "trash-can-outline", "checkbox-marked-circle-outline", "checkbox-blank-circle-outline"]` <br>Now we can also define the colors of the icons in our yaml, using the following format:  `- "checkbox-marked-circle-outline: [color] "`. But if you wish to leave the default colors (or only change some icons' colors), then you don't need to specify them and the icons will just assume their default color|
 | `filter_section_id`     | `integer` | `(none)`      | Only show tasks from one Todoist section, identified by its id.    |
-| `filter_section`        | `string` | `(none)`      | Only show tasks from one Todoist section, identified by its name.  |
+| `filter_section`        | `string` | `(none)`      | Only show tasks from one Todoist section, identified by its name. 🆕 Use `!*` to filter for items with no section. |
 | `filter_labels`         | `list` | `(none)`      | Only show tasks with the specified Todoist labels. See **Filtering by Labels** below for details on this powerful option.    |
 | `filter_show_dates_starting`<br>`filter_show_dates_ending` | `integer` or `string` | `(none)`      | Only show tasks with the specified dates window. See **Filtering by Dates** below for details.    |
 | `filter_show_dates_empty` | `boolean` | `true`      | Defines whether tasks without any specified date pass the filter or not. See **Filtering by Dates** below for details.    |
@@ -344,6 +344,7 @@ That was a lot of work 😅! If you enjoy and use this card, I'd appreciate it i
 [![](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/pgorod)
 
 Note that you pick a one-time amount and select any value you want.
+
 
 
 
