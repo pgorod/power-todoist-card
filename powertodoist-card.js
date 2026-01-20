@@ -1,8 +1,13 @@
-//import {LitElement, html, css, unsafeCSS } from 'https://unpkg.com/lit-element@3.3.2/lit-element.js?module';
-import { LitElement, html, css, unsafeCSS } from "https://cdn.jsdelivr.net/npm/lit-element@2.4.0/+esm?module";
-//import { renderTemplate } from 'ha-nunjucks';
 // registering with HACS: https://hacs.xyz/docs/publish/start
-import { marked } from 'https://cdn.skypack.dev/marked@4.0.0';
+
+//import {LitElement, html, css, unsafeCSS } from 'https://unpkg.com/lit-element@3.3.2/lit-element.js?module';
+//import { LitElement, html, css, unsafeCSS } from "https://cdn.jsdelivr.net/npm/lit-element@2.4.0/+esm?module";
+//import { renderTemplate } from 'ha-nunjucks';
+
+import { LitElement, html, css, unsafeCSS } from 'https://unpkg.com/lit@3.1.4/index.js?module';
+//import { marked } from 'https://cdn.skypack.dev/marked@4.0.0';
+import { marked } from 'https://cdn.jsdelivr.net/npm/marked@4.0.0/+esm';
+
 const todoistColors = {
     "berry_red": "rgb(184, 37, 111)",
     "red": "rgb(219, 64, 53)",
@@ -802,12 +807,11 @@ class PowerTodoistCard extends LitElement {
     async processAdds(adds) {
         for (const item of adds) {
             this.hass.callService('rest_command', 'todoist', {
-                url: 'tasks/quick',
+                url: 'quick/add',
                 payload: 'text=' + item,
             });
         }
     }
-
     // Usually this is triggered by UI event handlers: click, dbl_click, etc
     // But also via 'match' actions
     itemAction(item, action) {
@@ -1179,9 +1183,13 @@ class PowerTodoistCard extends LitElement {
             });
         }
         let section_id = this.myConfig.filter_section_id || section_name2id[this.myConfig.filter_section] || undefined;
+        if (this.myConfig?.filter_section === '!*') { // filter for sectionless items
+            section_id= -1;
+        }
         if (section_id) {
             items = items.filter(item => {
-                return item.section_id === section_id;
+                return (item.section_id === section_id) ||
+                    (item.section_id === null && section_id == -1);
             });
         }
         // filter items matching filter_labels criteria
@@ -1248,7 +1256,8 @@ class PowerTodoistCard extends LitElement {
                                 @pointerleave=${this._lpCancel}
                             ><span class="powertodoist-item-content ${(this.itemsEmphasized[item.id]) ? css`powertodoist-special` : css``}" >
                             ${item.content}</span></div>
-                            ${((this.myConfig.show_item_description === undefined) || (this.myConfig.show_item_description !== false)) && item.description
+                            ${(this.myConfig.show_item_description ?? true) && item.description?.trim()
+    //                      ${((this.myConfig.show_item_description === undefined) || (this.myConfig.show_item_description !== false)) && item.description
                             ? html`<div
                                     @pointerdown=${(e) => this._lpStart(item, "longpress_description")}
                                     @pointerup=${(e) => this._lpEnd(item, "description", "dbl_description")}
@@ -1507,25 +1516,19 @@ class PowerTodoistCard extends LitElement {
                 /* border: 1px solid red; border-width: 1px 1px 1px 1px; */
                 color: #808080;
             }
-
-            .powertodoist-item-text {
-                flex: 1;
-                min-width: 0;
-            }
-
+           
             .powertodoist-item-text, .powertodoist-item-text > span, .powertodoist-item-text > div {
                 font-size: 16px;
-                white-space: normal;
-                word-break: break-word;
-                overflow-wrap: break-word;
-                /* Remove these:
+                white-space: nowrap;
                 overflow: hidden;
-                text-overflow: ellipsis; */
+                text-overflow: ellipsis;
+                /* border: 1px solid green; border-width: 1px 1px 1px 1px; */
             }
 
             .powertodoist-item-content {
                 display: block;
                 margin: -6px 0 -6px;
+                /* border: 1px solid red; border-width: 1px 1px 1px 1px; */
             }
 
             .powertodoist-item-description {
@@ -1534,6 +1537,8 @@ class PowerTodoistCard extends LitElement {
                 font-size: 12px !important;
                 line-height: 1.2 !important;
                 margin: 0;
+                overflow-wrap: break-word;
+                white-space: normal;
             }
            
             .powertodoist-item-close {
@@ -1783,4 +1788,3 @@ dateFormat.i18n = {
 Date.prototype.format = function (mask, utc) {
     return dateFormat(this, mask, utc);
 };
-
