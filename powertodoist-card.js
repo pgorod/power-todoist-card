@@ -1516,12 +1516,17 @@ class PowerTodoistCard extends LitElement {
                 /* border: 1px solid red; border-width: 1px 1px 1px 1px; */
                 color: #808080;
             }
-           
+
+            .powertodoist-item-text {
+                flex: 1;
+                min-width: 0;
+            }
+            
             .powertodoist-item-text, .powertodoist-item-text > span, .powertodoist-item-text > div {
                 font-size: 16px;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
+                white-space: normal;      
+                word-break: break-word;   
+                overflow-wrap: break-word; 
                 /* border: 1px solid green; border-width: 1px 1px 1px 1px; */
             }
 
@@ -1788,3 +1793,4 @@ dateFormat.i18n = {
 Date.prototype.format = function (mask, utc) {
     return dateFormat(this, mask, utc);
 };
+
