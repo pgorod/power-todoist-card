@@ -15,9 +15,5 @@ export default defineConfig({
         inlineDynamicImports: true
       }
     }
-  },
-  server: {
-    open: true,
-    port: 4173
   }
 });

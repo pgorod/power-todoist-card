@@ -12,7 +12,6 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "dev": "vite",
     "build": "vite build && node scripts/copy-build.cjs",
     "watch": "npm run watch:ha",
     "watch:ha": "node scripts/watch-ha.mjs"

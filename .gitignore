@@ -4,6 +4,8 @@
 node_modules/
 dist/
 .vite/
+package-lock.json
+index.html
 
 # System
 .DS_Store

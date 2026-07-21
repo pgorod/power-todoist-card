@@ -904,12 +904,6 @@ npm run typecheck
 npm run build
 ```
 
-Development server:
-
-```bash
-npm run dev
-```
-
 Build output:
 
 ```text

@@ -11,12 +11,9 @@ npm install
 ```bash
 npm run typecheck
 npm run build
-npm run dev
 ```
 
 `npm run build` generates `dist/powertodoist-card.js` and then copies it to `powertodoist-card.js` in the project root. The root bundle is the file used by HACS/manual installs.
-
-`npm run dev` starts the Vite development harness. It loads `src/main.ts` directly.
 
 ## Watch Into A Home Assistant Config Folder
 
