@@ -7,7 +7,12 @@ import { filterTasks } from "../features/task-filters";
 import { formatRelativeDayTitle } from "../features/day-title";
 import { isDueDateLabel } from "../features/due-dates";
 import { renderMarkdownTemplate } from "../features/markdown-template";
-import { applyStatusFromLabels, getDisplayLabels, type TodoistTaskWithStatus } from "../features/task-labels";
+import {
+  applyStatusFromLabels,
+  getDisplayLabels,
+  parseDisplayLabel,
+  type TodoistTaskWithStatus,
+} from "../features/task-labels";
 import { extractCardLabels, filterBySection, getCardName, getSectionId } from "../features/task-selection";
 import { getCardClass, getCardStyle } from "../features/card-visuals";
 import { getConfiguredIcon, getTaskIcon, type IconConfig } from "../features/task-icons";
@@ -605,13 +610,17 @@ export class PowerTodoistCard extends LitElement {
   }
 
   private renderLabel(label: string, task: TodoistTaskWithStatus, context: CardContext) {
-    const isOutline = label.endsWith("_outline");
     const isDateLabel = isDueDateLabel(label);
-    const cleanLabel = label.replace(/_outline$/, "");
+    const parsedLabel = parseDisplayLabel(label);
+    const isOutline = parsedLabel.isOutline;
+    const cleanLabel = parsedLabel.text;
     const colorKey = cleanLabel.split(":")[0]?.trim() ?? cleanLabel;
     const color = isDateLabel
       ? "var(--primary-background-color)"
-      : context.labelColors.get(cleanLabel) ?? context.labelColors.get(colorKey) ?? getTodoistColor("green");
+      : this.getLabelColor(parsedLabel.color) ??
+        context.labelColors.get(cleanLabel) ??
+        context.labelColors.get(colorKey) ??
+        getTodoistColor("green");
 
     return html`
       <span
@@ -631,9 +640,11 @@ export class PowerTodoistCard extends LitElement {
   }
 
   private renderStaticLabel(label: string, context: CardContext) {
-    const isOutline = label.endsWith("_outline");
-    const cleanLabel = label.replace(/_outline$/, "");
-    const color = context.labelColors.get(label) ??
+    const parsedLabel = parseDisplayLabel(label);
+    const isOutline = parsedLabel.isOutline;
+    const cleanLabel = parsedLabel.text;
+    const color = this.getLabelColor(parsedLabel.color) ??
+      context.labelColors.get(label) ??
       context.labelColors.get(cleanLabel) ??
       getTodoistColor("green");
 
@@ -645,6 +656,11 @@ export class PowerTodoistCard extends LitElement {
         ${cleanLabel}
       </span>
     `;
+  }
+
+  private getLabelColor(color: string | undefined): string | undefined {
+    if (!color) return undefined;
+    return isValidTodoistColor(color) ? getTodoistColor(color) : color;
   }
 
   private getVisibleLabels(task: TodoistTask, context: CardContext): string[] {

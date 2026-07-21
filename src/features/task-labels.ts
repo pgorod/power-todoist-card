@@ -1,9 +1,17 @@
 import type { PowerTodoistConfig, TodoistLabelColor, TodoistTask } from "../core/types";
 import { getDueDateLabel } from "./due-dates";
 
+const EXTRA_LABEL_COLOR_SEPARATOR = "||pt-color:";
+
 export type TodoistTaskWithStatus = TodoistTask & {
   statusFromLabelCriteria?: boolean;
 };
+
+export interface ParsedDisplayLabel {
+  text: string;
+  color?: string;
+  isOutline: boolean;
+}
 
 export function matchesLabelCriteria(
   task: TodoistTask,
@@ -76,6 +84,12 @@ export function generateExtraLabels(
   const extraLabels: string[] = [];
 
   config.extra_labels?.forEach((rule) => {
+    const conditionalDisplayLabel = getConditionalDisplayLabel(rule, labels);
+    if (conditionalDisplayLabel) {
+      extraLabels.push(conditionalDisplayLabel);
+      return;
+    }
+
     const parts = rule.split(/[:+]/).map((part) => part.trim()).filter(Boolean);
     const firstPart = parts[0];
     if (!firstPart) return;
@@ -94,4 +108,62 @@ export function generateExtraLabels(
   });
 
   return extraLabels;
+}
+
+export function parseDisplayLabel(label: string): ParsedDisplayLabel {
+  const isOutline = label.endsWith("_outline");
+  const cleanLabel = isOutline ? label.slice(0, -"_outline".length) : label;
+  const colorSeparatorIndex = cleanLabel.indexOf(EXTRA_LABEL_COLOR_SEPARATOR);
+
+  if (colorSeparatorIndex < 0) {
+    return {
+      text: cleanLabel,
+      isOutline,
+    };
+  }
+
+  return {
+    text: cleanLabel.slice(0, colorSeparatorIndex),
+    color: cleanLabel.slice(colorSeparatorIndex + EXTRA_LABEL_COLOR_SEPARATOR.length),
+    isOutline,
+  };
+}
+
+function getConditionalDisplayLabel(rule: string, labels: string[]): string | undefined {
+  const ruleParts = splitConditionalDisplayRule(rule);
+  if (!ruleParts) return undefined;
+
+  const { color, criteria, text } = ruleParts;
+  if (!criteria.some((criterion) => labels.includes(criterion))) return undefined;
+
+  return color ? `${text}${EXTRA_LABEL_COLOR_SEPARATOR}${color}` : text;
+}
+
+function splitConditionalDisplayRule(rule: string): {
+  color?: string;
+  criteria: string[];
+  text: string;
+} | undefined {
+  const separatorIndex = rule.indexOf(":");
+  if (separatorIndex < 0) return undefined;
+
+  const text = rule.slice(0, separatorIndex).trim();
+  const detail = rule.slice(separatorIndex + 1).trim();
+  const conditionIndex = detail.indexOf("=");
+  if (!text || conditionIndex < 0) return undefined;
+
+  const color = detail.slice(0, conditionIndex).trim();
+  const criteria = detail
+    .slice(conditionIndex + 1)
+    .split("+")
+    .map((criterion) => criterion.trim())
+    .filter(Boolean);
+
+  if (!criteria.length) return undefined;
+
+  return {
+    text,
+    color: color || undefined,
+    criteria,
+  };
 }
