@@ -1,106 +1,114 @@
-type: custom:swipe-card
-start_card: 1
-parameters:
-  #try these other effects: coverflow cube cards
-  effect: cube 
-  rewind: true
-  grabCursor: true
-  centeredSlides: true
-  slidesPerView: auto
-  pagination: null
-  type: bullets
-cards:
-# -----------------------------------------------
-  - type: custom:powertodoist-card
-    entity: sensor.todoist_project_demo
-    filter_section_id: "126441621"
-    filter_labels:
-      - "!Charcoal"
-      - "*"
-    actions_close:
-      - prompt_texts: "Title here!|post-%content%"
-      - update:
-        - content: "Now is %input%"
-        - description: "Input: %input% content: %content%"
-    actions_content:
-      - prompt_texts: "Insert new content:|%content%"
-      - update:
-        - content: "%input%"
-        - description: "Input: %input% content: %content%"
-    actions_dbl_content:
-      - label:
-        - "!*"
-        - "Green"
-      - move
-      - update:
-        - content: "User was %user%"
-        - description: |
-            %input% %user% ✅ %date% labels will be %str_labels%%line%%was%
-        - priority: 3
-    actions_label:
-      - label:
-        - "!Green"
-      - service: automation.action_notify_sim
-    actions_dbl_label:
-      - toast: "Toasted! 🍞"
-      - label:
-        - "!*"
-    actions_delete:
-      - confirm: "You really wanna delete it?"
-      - label:
-        - "Charcoal"
-      - delete
-    actions_dbl_delete:
-      - allow: ["user1", "user2"]
-      - match: 
-        - ["labels", "Blue", "matched_bluesy"]
-        - ["content", "Clear backlog", "matched_somecontent"]
-      - label:
-        - "!%user%"
-      - add:
-        - "Created from Action #myProject @%user%"
-    actions_matched_somecontent:
-      - toast: "‼ Matched content ‼"    
-    actions_matched_bluesy:
-      - toast: "‼ Matched label ‼"    
-    show_item_add: true
-    show_item_delete: true
-    show_completed: 5
-    use_quick_add: true 
-    icons: ["checkbox-marked-circle-outline", "circle-medium", "undo", "trash-can-outline"]
-    #icons: ["numeric-1-box", "numeric-2-box", "numeric-3-box", "numeric-4-box"]
-# -----------------------------------------------
-  - type: custom:powertodoist-card
-    entity: sensor.todoist_project_demo
-    filter_section_id: "126441679"
-    filter_labels: 
-      - "Blue"
-    actions_close:
-      - label:
-        - "Blue"
-        - "!Green"
-      - move  
-    show_item_add: true
-    show_item_delete: false
-    use_quick_add: true 
-# -----------------------------------------------
-  - type: custom:powertodoist-card
-    entity: sensor.todoist_project_demo
-    #filter_section_id: "126441680"
-    filter_section: "Done"
-    actions_close:
-      - label:
-        - "Blue"
-        - "!Green"
-      - move  
-    show_item_add: true
-    show_item_delete: false
-    use_quick_add: true 
-# -----------------------------------------------
-  - type: markdown
-    content: >
-      <h1><ha-alert alert-type="info">Some Instructions...</ha-alert></h1> 
-      {{ state_attr('sensor.todoist_project_demo','project_notes')[0].content }}
-      ... and remember to remember things!
-      <p><img style="display: block; margin-left: auto; margin-right: auto; width: 70%;" src="https://media.giphy.com/media/lELRD773cY7Sg/giphy.gif"></p>
+# PowerTodoist Card demo dashboard snippets.
+#
+# Replace these entities with your own Home Assistant Todoist REST sensors:
+#
+#   sensor.todoist_project_demo
+#   sensor.comments_project_demo
+#
+# The card expects the project sensor to expose Todoist data in attributes:
+#   project, tasks, sections
 
+# Basic project card
+type: custom:powertodoist-card
+entity: sensor.todoist_project_demo
+comments_entity: sensor.comments_project_demo
+show_header: true
+show_completed: 5
+show_item_add: true
+use_quick_add: true
+show_dates: true
+date_format: "dd-mmm H'h'MM"
+
+---
+
+# One card per Todoist section, useful inside a swipe-card or grid.
+type: custom:powertodoist-card
+entity: sensor.todoist_project_demo
+filter_section: "Backlog"
+actions_close:
+  - move
+show_item_add: true
+use_quick_add: true
+
+---
+
+# Advanced actions example.
+type: custom:powertodoist-card
+entity: sensor.todoist_project_demo
+filter_labels:
+  - "!Hidden"
+  - "*"
+actions_close:
+  - prompt_texts: "New title:|%content%"
+  - update:
+      - content: "%input%"
+      - description: "Changed by %user% on %date%%line%Previous title: %was%"
+  - toast: "Task updated"
+actions_dbl_content:
+  - label:
+      - "!*"
+      - "Green"
+  - move
+actions_label:
+  - label:
+      - "!Green"
+  - service: automation.todoist_label_clicked
+actions_delete:
+  - confirm: "Delete this task?"
+  - delete
+actions_dbl_delete:
+  - allow:
+      - "admin"
+  - match:
+      - ["labels", "Blue", "matched_blue"]
+      - ["content", "Clear backlog", "matched_content"]
+  - add:
+      - "Created from PowerTodoist #myproject @%user%"
+actions_matched_blue:
+  - toast: "Matched label Blue"
+actions_matched_content:
+  - toast: "Matched task content"
+show_completed: 5
+icons:
+  - "checkbox-marked-circle-outline:green"
+  - "circle-medium:grey"
+  - "undo:blue"
+  - "trash-can-outline:red"
+
+---
+
+# Multi-user label/status workflow.
+# Tapping a task toggles the current Home Assistant user's label.
+type: custom:powertodoist-card
+entity: sensor.todoist_project_demo
+actions_close:
+  - label:
+      - ":%user%"
+status_from_labels:
+  - "%user%"
+icons:
+  - checkbox-marked-circle-outline
+  - circle-medium
+  - undo
+  - trash-can-outline
+  - silverware-fork-knife
+  - selection-ellipse-remove
+
+---
+
+# Household count example.
+# Real labels are hidden; generated count labels stay visible.
+type: custom:powertodoist-card
+entity: sensor.todoist_project_demo
+comments_entity: sensor.comments_project_demo
+filter_section: "Saturday"
+show_item_labels: false
+actions_close:
+  - label:
+      - ":%user%"
+status_from_labels:
+  - "%user%"
+extra_labels:
+  - "Normal: +alice+bob+charlie"
+  - "Vegetarian: +veg_alice+veg_bob"
+  - "Diet: +diet_alice+diet_bob"

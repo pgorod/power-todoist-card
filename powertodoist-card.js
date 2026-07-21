@@ -1,1796 +1,2244 @@
-// registering with HACS: https://hacs.xyz/docs/publish/start
-
-//import {LitElement, html, css, unsafeCSS } from 'https://unpkg.com/lit-element@3.3.2/lit-element.js?module';
-//import { LitElement, html, css, unsafeCSS } from "https://cdn.jsdelivr.net/npm/lit-element@2.4.0/+esm?module";
-//import { renderTemplate } from 'ha-nunjucks';
-
-import { LitElement, html, css, unsafeCSS } from 'https://unpkg.com/lit@3.1.4/index.js?module';
-//import { marked } from 'https://cdn.skypack.dev/marked@4.0.0';
-import { marked } from 'https://cdn.jsdelivr.net/npm/marked@4.0.0/+esm';
-
-const todoistColors = {
-    "berry_red": "rgb(184, 37, 111)",
-    "red": "rgb(219, 64, 53)",
-    "orange": "rgb(255, 153, 51)",
-    "yellow": "rgb(250, 208, 0)",
-    "olive_green": "rgb(175, 184, 59)",
-    "lime_green": "rgb(126, 204, 73)",
-    "green": "rgb(41, 148, 56)",
-    "mint_green": "rgb(106, 204, 188)",
-    "teal": "rgb(21, 143, 173)",
-    "sky_blue": "rgb(20, 170, 245)",
-    "light_blue": "rgb(150, 195, 235)",
-    "blue": "rgb(64, 115, 255)",
-    "grape": "rgb(136, 77, 255)",
-    "violet": "rgb(175, 56, 235)",
-    "lavender": "rgb(235, 150, 235)",
-    "magenta": "rgb(224, 81, 148)",
-    "salmon": "rgb(255, 141, 133)",
-    "charcoal": "rgb(128, 128, 128)",
-    "grey": "rgb(184, 184, 184)",
-    "taupe": "rgb(204, 172, 147)",
-}
-
-function replaceMultiple(str2Replace, mapReplaces, was, input) {
-    mapReplaces["%was%"] = was;
-    mapReplaces["%input%"] = input;
-    //mapReplaces["%input%"] = renderTemplate(this.hass, "{{ 'ding' }}");
-    mapReplaces["%line%"] = '\n';
-    var re = new RegExp(Object.keys(mapReplaces).join("|"), "gi");
-    if (typeof str2Replace !== "string") return str2Replace;
-    return str2Replace.replace(re, function (matched) {
-        return mapReplaces[matched.toLowerCase()];
-    });
-}
-class PowerTodoistCardEditor extends LitElement {
-    static get properties() {
-        return {
-            hass: Object,
-            config: Object,
-        };
-    }
-
-    get _entity() {
-        if (this.config) {
-            return this.config.entity || '';
-        }
-
-        return '';
-    }
-    get _show_completed() {
-        if (this.config) {
-            return (this.config.show_completed !== undefined) ? this.config.show_completed : 5;
-        }
-
-        return 5;
-    }
-
-    get _show_header() {
-        if (this.config) {
-            return this.config.show_header || true;
-        }
-
-        return true;
-    }
-    get _show_item_add() {
-        if (this.config) {
-            return this.config.show_item_add || true;
-        }
-
-        return true;
-    }
-    get _use_quick_add() {
-        if (this.config) {
-            return this.config.use_quick_add || false;
-        }
-
-        return false;
-    }
-    get _show_item_close() {
-        if (this.config) {
-            return this.config.show_item_close || true;
-        }
-
-        return true;
-    }
-    get _show_item_delete() {
-        if (this.config) {
-            return this.config.show_item_delete || true;
-        }
-
-        return true;
-    }
-    get _filter_today_overdue() {
-        if (this.config) {
-            return this.config.filter_today_overdue || false;
-        }
-
-        return false;
-    }
-
-    setConfig(config) {
-        this.config = config;
-    }
-
-    configChanged(config) {
-        const e = new Event('config-changed', {
-            bubbles: true,
-            composed: true,
-        });
-
-        e.detail = { config: config };
-
-        this.dispatchEvent(e);
-    }
-
-    getEntitiesByType(type) {
-        return this.hass
-            ? Object.keys(this.hass.states).filter(entity => entity.substr(0, entity.indexOf('.')) === type)
-            : [];
-    }
-    isNumeric(v) {
-        return !isNaN(parseFloat(v)) && isFinite(v);
-    }
-
-    valueChanged(e) {
-        if (
-            !this.config
-            || !this.hass
-            || (this[`_${e.target.configValue}`] === e.target.value)
-        ) {
-            return;
-        }
-
-        if (e.target.configValue) {
-            if (e.target.value === '') {
-                if (!['entity', 'show_completed'].includes(e.target.configValue)) {
-                    delete this.config[e.target.configValue];
-                }
-            } else {
-                this.config = {
-                    ...this.config,
-                    [e.target.configValue]: e.target.checked !== undefined
-                        ? e.target.checked
-                        : this.isNumeric(e.target.value) ? parseFloat(e.target.value) : e.target.value,
-                };
-            }
-        }
-
-        this.configChanged(this.config);
-    }
-
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-
-    render() {
-        if (!this.hass) {
-            return html``;
-        }
-
-        const entities = this.getEntitiesByType('sensor');
-        const completedCount = [...Array(16).keys()];
-        return html`<div class="card-config">
-            <div class="option">
-                <ha-select
-                    naturalMenuWidth
-                    fixedMenuPosition
-                    label="Entity (required)"
-                    @selected=${this.valueChanged}
-                    @closed=${(event) => event.stopPropagation()}
-                    .configValue=${'entity'}
-                    .value=${this._entity}
-                >
-                    ${entities.map(entity => {
-            return html`<mwc-list-item .value="${entity}">${entity}</mwc-list-item>`;
-        })}
-                </ha-select>
-            </div>
-            <div class="option">
-                <ha-select
-                    naturalMenuWidth
-                    fixedMenuPosition
-                    label="Number of completed tasks shown at the end of the list (0 to disable)"
-                    @selected=${this.valueChanged}
-                    @closed=${(event) => event.stopPropagation()}
-                    .configValue=${'show_completed'}
-                    .value=${this._show_completed}
-                >
-                    ${completedCount.map(count => {
-            return html`<mwc-list-item .value="${count}">${count}</mwc-list-item>`;
-        })}
-                </ha-select>
-            </div>
-           
-            <div class="option">
-                <ha-switch
-                    .checked=${(this.config.show_header === undefined) || (this.config.show_header !== false)}
-                    .configValue=${'show_header'}
-                    @change=${this.valueChanged}
-                >
-                </ha-switch>
-                <span>Show header</span>
-            </div>
-            <div class="option">
-                <ha-switch
-                    .checked=${(this.config.show_item_add === undefined) || (this.config.show_item_add !== false)}
-                    .configValue=${'show_item_add'}
-                    @change=${this.valueChanged}
-                >
-                </ha-switch>
-                <span>Show text input element for adding new tasks to the list</span>
-            </div>
-            <div class="option">
-                <ha-switch
-                    .checked=${(this.config.use_quick_add !== undefined) && (this.config.use_quick_add !== false)}
-                    .configValue=${'use_quick_add'}
-                    @change=${this.valueChanged}
-                >
-                </ha-switch>
-                <span>
-                    Use the <a target="_blank" href="https://todoist.com/help/articles/task-quick-add">Quick Add</a> implementation, available in the official Todoist clients
-                </span>
-            </div>
-            <div class="option" style="font-size: 0.7rem; margin: -12px 0 0 45px">
-                <span>
-                    Check your <a target="_blank" href="https://github.com/grinstantin/todoist-card#using-the-card">configuration</a> before using this option
-                </span>
-            </div>
-            <div class="option">
-                <ha-switch
-                    .checked=${(this.config.show_item_close === undefined) || (this.config.show_item_close !== false)}
-                    .configValue=${'show_item_close'}
-                    @change=${this.valueChanged}
-                >
-                </ha-switch>
-                <span>Show "close/complete" and "uncomplete" buttons</span>
-            </div>
-            <div class="option">
-                <ha-switch
-                    .checked=${(this.config.show_item_delete === undefined) || (this.config.show_item_delete !== false)}
-                    .configValue=${'show_item_delete'}
-                    @change=${this.valueChanged}
-                >
-                </ha-switch>
-                <span>Show "delete" buttons</span>
-            </div>
-            <div class="option">
-                <ha-switch
-                    .checked=${(this.config.filter_today_overdue !== undefined) && (this.config.filter_today_overdue !== false)}
-                    .configValue=${'filter_today_overdue'}
-                    @change=${this.valueChanged}
-                >
-                </ha-switch>
-                <span>Only show today or overdue</span>
-            </div>
-        </div>`;
-    }
-
-    static get styles() {
-        return css`
-            .card-config ha-select {
-                width: 100%;
-            }
-           
-            .option {
-                display: flex;
-                align-items: center;
-                padding: 5px;
-            }
-           
-            .option ha-switch {
-                margin-right: 10px;
-            }
-        `;
-    }
-}
-
-class PowerTodoistCard extends LitElement {
-    constructor() {
-        super();
-        this.itemsJustCompleted = [];
-        this.itemsEmphasized = [];
-        this.toastText = "";
-        this.myConfig = {};
-    }
-
-    static get properties() {
-        return {
-            hass: Object,
-            config: Object,
-        };
-    }
-
-    //trying to set up long press
-    // Configuration
-    _longPressMs = 1500; // How long to hold before triggering long press (milliseconds)
-    _clickDelayMs = 500; // How long to wait for second click in double-click detection (milliseconds)
-    // State tracking
-    _lpTimer = null; // Timer ID for long press - tracks if long press is active
-    _clickTimer = null; // Timer ID for single click delay - prevents premature single-click firing
-    _clickCount = 0; // Counts clicks (0, 1, or 2) to detect single vs double click
-    
-    _lpStart(item, longPressActionName) {
-        // Start long press timer
-        this._lpTimer = setTimeout(() => {
-            this._lpTimer = null;
-            this._clickCount = 0; // Cancel any pending clicks
-            if (this._clickTimer) {
-                clearTimeout(this._clickTimer);
-                this._clickTimer = null;
-            }
-            this.itemAction(item, longPressActionName);
-        }, this._longPressMs);
-    }
-
-    _lpEnd(item, clickActionName, dblClickActionName = "") {
-        if (this._lpTimer) {
-            // Long press timer still running ÔåÆ this was a short press
-            clearTimeout(this._lpTimer);
-            this._lpTimer = null;
-
-            // Handle click counting for single/double click detection
-            this._clickCount++;
-
-            if (this._clickCount === 1) {
-                if (dblClickActionName === "") {
-                    // No double click detection wanted - fast-track to single click action
-                    this._clickCount = 0;
-                    this._clickTimer = null;
-                    this.itemAction(item, clickActionName);
-                }
-                else {
-                    // First click - start timer to wait for potential second click
-                    this._clickTimer = setTimeout(() => {
-                        // Timer expired with only one click ÔåÆ single click
-                        this._clickCount = 0;
-                        this._clickTimer = null;
-                        this.itemAction(item, clickActionName);
-                    }, this._clickDelayMs);
-                }
-            } else if (this._clickCount === 2) {
-                // Second click within delay ÔåÆ double click
-                clearTimeout(this._clickTimer);
-                this._clickTimer = null;
-                this._clickCount = 0;
-                this.itemAction(item, dblClickActionName);
-            }
-        }
-    }
-
-    _lpCancel() {
-        if (this._lpTimer) {
-            clearTimeout(this._lpTimer);
-            this._lpTimer = null;
-        }
-        // Note: We don't cancel click timers here as pointer leave/cancel
-        // shouldn't interfere with click detection
-    }
-
-    static getConfigElement() {
-        return document.createElement('powertodoist-card-editor');
-    }
-
-    setConfig(config) {
-        if (!config.entity) {
-            throw new Error('Entity is not set!');
-        }
-
-        this.config = config;
-        this.myConfig = this.parseConfig(config);
-    }
-
-    getCardSize() {
-        return this.hass ? (this.hass.states[this.config.entity].attributes.tasks.length || 1) : 1;
-    }
-
-    random(min, max) {
-        return Math.floor(Math.random() * (max - min) + min);
-    }
-
-    getUUID() {
-        let date = new Date();
-
-        return this.random(1, 100) + '-' + (+date) + '-' + date.getMilliseconds();
-    }
-
-    itemAdd(e) {
-        if (e.which === 13) {
-            let input = this.shadowRoot.getElementById('powertodoist-card-item-add');
-            let value = input.value;
-
-            if (value && value.length > 1) {
-                let stateValue = this.hass.states[this.config.entity].state || undefined;
-
-                if (stateValue) {
-                    let uuid = this.getUUID();
-                    if (!this.config.use_quick_add) {
-                        let commands = [{
-                            'type': 'item_add',
-                            'temp_id': uuid,
-                            'uuid': uuid,
-                            'args': {
-                                'project_id': stateValue,
-                                'content': value,
-                            },
-                        }];
-                        this.hass
-                            .callService('rest_command', 'todoist', {
-                                url: 'sync',
-                                payload: 'commands=' + JSON.stringify(commands),
-                            })
-                            .then(response => {
-                                input.value = '';
-                                this.hass.callService('homeassistant', 'update_entity', {
-                                    entity_id: this.config.entity,
-                                });
-                            });
-                    } else {
-                        let state = this.hass.states[this.config.entity] || undefined;
-                        if (!state) {
-                            return;
-                        }
-
-                        // The text of the task that is parsed. It can include...
-                        // due date (in free form text)
-                        // #project
-                        // @label
-                        // +assignee
-                        // /section
-                        // // description (at the end)
-                        // p2 priority
-                        var qa = value;
-                        try {
-                            if (this.myConfig.filter_section && !qa.includes(' /'))
-                                qa = qa + ' /' + this.myConfig.filter_section.replaceAll(' ', '\\ ');
-                        } catch (error) { }
-                        try {
-                            if (state.attributes.project.name && !qa.includes(' #'))
-                                qa = qa + ' #' + state.attributes.project.name.replaceAll(' ', '\\ ');
-                        } catch (error) { }
-                        this.hass
-                            .callService('rest_command', 'todoist', {
-                                url: 'tasks/quick',
-                                payload: 'text=' + qa,
-                            })
-                            .then(response => {
-                                input.value = '';
-
-                                this.hass.callService('homeassistant', 'update_entity', {
-                                    entity_id: this.config.entity,
-                                });
-                            });
-                    }
-                }
-            }
-        }
-    }
-
-
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-
-    parseConfig(srcConfig) {
-        // Using eval, dangers and alternatives: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval#never_use_eval!
-        // Thomas Loven old example using Jinja backend renders: https://github.com/thomasloven/lovelace-template-entity-row/blob/master@%7B2020-03-10T16:06:34Z%7D/src/main.js
-        // https://github.com/Savjee/button-text-card/blob/master/src/button-text-card.ts
-        var parsedConfig;
-        var project_notes = [];
-        let myStrConfig = JSON.stringify(srcConfig);
-        let date_formatted = (new Date()).format(this.myConfig["date_format"] || "mmm dd H:mm");
-        // let date_formatted = (new Date()).format(srcConfig["date_format"] || "mmm dd H:mm");
-        //try { project_notes = this.hass.states[this.config.entity].attributes['project_notes'];} catch (error) { }
-        try {
-            const project_comments_results = this.hass.states[this.myConfig.comments_entity].attributes['results'];
-            project_notes = project_comments_results[0].content;
-        } catch (error) {
-            project_notes = 'No project notes yet';
-        }
-        const strLabels = (typeof (item) !== "undefined" && item.labels) ? JSON.stringify(item.labels) : "";
-        var mapReplaces = {
-            "%user%": this.hass ? this.hass.user.name : "",
-            "%date%": `${date_formatted}`,
-            "%str_labels%": strLabels,
-            "%section%": srcConfig.filter_section ?? '',
-        };
-        if (Array.isArray(project_notes) && project_notes.length > 0) {
-            project_notes.forEach(function (value, index) {
-                mapReplaces["%project_notes_" + index + '%'] = value.content;
-                if (index == 0) mapReplaces["%project_notes%"] = value.content;
-            });
-        } else {
-            mapReplaces["%project_notes%"] = "";
-        }
-        if (this.hass && this.hass.states['sensor.dow'] && this.hass.states['sensor.dow']?.state) {
-            var dazeString = this.hass.states['sensor.dow'].state.split(', ');
-            [0, 1, 2, 3, 4, 5, 6].forEach(function (index) {
-                mapReplaces['%dow' + (index - 1) + '%'] = dazeString[index]?.replaceAll("'", "") || "";
-            });
-        }
-        // Pre-process only items whose _values_ contain a variable (e.g., %somevar% : %someothervar%)
-        for (const key in mapReplaces) {
-            if (/%[a-zA-Z0-9_-]+%/.test(mapReplaces[key])) {
-                mapReplaces[key] = replaceMultiple(mapReplaces[key], mapReplaces);
-            }
-        }
-        myStrConfig = replaceMultiple(myStrConfig, mapReplaces);
-        try {
-            parsedConfig = JSON.parse(myStrConfig);
-        } catch (err) {
-            var source = "";
-            parsedConfig = JSON.parse(JSON.stringify(srcConfig)); // cloning prevents preventExtensions from limiting us
-            try {
-                const span = 40;
-                const start = err.message.match(/[-+]?[0-9]*\.?[0-9]+/g)[1] - span / 2;
-                source = "(near --> " + myStrConfig.substring(start, start + span) + " <---)";
-            } catch (err2) {
-                //alert(err2);
-            }
-            parsedConfig["error"] = err.name + ": " + err.message + source;
-            //alert(err);
-        }
-        //parsedConfig['mapReplaces_debug'] = JSON.stringify(mapReplaces);
-        return parsedConfig;
-    }
-
-    buildCommands(item, button = "actions_close") {
-        let state = this.hass.states[this.config.entity].attributes;
-        // calling parseConfig here repeats some work, but is helpful because %user% variable and others are now available:
-        let actions = this.config[button] !== undefined ? this.parseConfig(this.config[button]) : [];
-        // actions are not executed sequentially at all. A for each could cjange this, either here or one level up at ItemAction
-        // It would not imply too many changes here. But it would complicate the aggregation of API updates into a single request
-        // actions.forEach(a => {
-        // let actions = [a];
-        // console.log(actions);
-        //});
-        let automation = "", confirm = "", promptTexts = "", toast = "";
-        let commands = [], updates = [], labelChanges = [], adds = [], allow = [], matches = [], emphasis = [];
-        try { automation = actions.find(a => typeof a === 'object' && a.hasOwnProperty('service')).service || ""; } catch (error) { }
-        try { confirm = actions.find(a => typeof a === 'object' && a.hasOwnProperty('confirm')).confirm || ""; } catch (error) { }
-        try { promptTexts = actions.find(a => typeof a === 'object' && a.hasOwnProperty('prompt_texts')).prompt_texts || ""; } catch (error) { }
-        try { updates = actions.find(a => typeof a === 'object' && a.hasOwnProperty('update')).update || []; } catch (error) { }
-        try { labelChanges = actions.find(a => typeof a === 'object' && a.hasOwnProperty('label')).label || []; } catch (error) { }
-        try { toast = actions.find(a => typeof a === 'object' && a.hasOwnProperty('toast')).toast || ""; } catch (error) { }
-        try { adds = actions.find(a => typeof a === 'object' && a.hasOwnProperty('add')).add || []; } catch (error) { }
-        try { allow = actions.find(a => typeof a === 'object' && a.hasOwnProperty('allow')).allow || []; } catch (error) { }
-        try { matches = actions.find(a => typeof a === 'object' && a.hasOwnProperty('match')).match || []; } catch (error) { }
-        try { emphasis = actions.find(a => typeof a === 'object' && a.hasOwnProperty('emphasis')).emphasis || []; } catch (error) { }
-        try { paint = actions.find(a => typeof a === 'object' && a.hasOwnProperty('paint')).paint || []; } catch (error) { }
-        //const strLabels = JSON.stringify(item.labels); // moved to Parse, delete when not needed
-        let initialLabels = [...item.labels];
-        let labels = item.labels;
-        if (labelChanges.includes("!*")) labels = []; // use !* to clear all
-        if (labelChanges.includes("!_")) labels = // use !_ to clear all labels starting with _
-            labels.filter(function (label) { return label[0] !== '_'; });
-        if (labelChanges.includes("!!")) labels = // use !! to clear all labels NOT starting with _
-            labels.filter(function (label) { return label[0] === '_'; });
-        labelChanges.map(change => {
-            let newLabel = replaceMultiple(change, { "%user%": this.hass.user.name });
-            if (change.startsWith("!")) { // remove specific label
-                if (labels.includes(change.slice(1)))
-                    labels = labels.filter(e => e !== change.slice(1)); // remove it
-            } else if (change.startsWith(":")) { // Toggle specific label
-                if (labels.includes(change.slice(1)))
-                    labels = labels.filter(e => e !== change.slice(1)); // toggle removes it
-                else
-                    if (!labels.includes(newLabel)) labels.push(newLabel.slice(1)); // toggle adds it
-            } else {
-                if (!labels.includes(newLabel)) labels.push(newLabel); // (simple) add it
-            }
-        });
-
-        // Set labelsBeingAdded and labelsBeingRemoved by comparing initialLabels and labels
-        let labelsBeingAdded = labels.filter(l => !initialLabels.includes(l));
-        let labelsBeingRemoved = initialLabels.filter(l => !labels.includes(l));
-        this.changeLabelsUINow(item, labelsBeingAdded, labelsBeingRemoved);
-        // Let's make things really easy to use further down:
-        let section_id2order = {}; // Object, not array - we store section_ids as strings
-        section_id2order[""] = 0; // not really a section in Todoist, but when incremented, will move to first section
-        let section_order2id = [];
-        state.sections.map(s => {
-            section_id2order[s.id.toString()] = s.section_order;
-            section_order2id[s.section_order] = s.id;
-        });
-        let nextSection = section_order2id[section_id2order[item.section_id] + 1] || item.project_id;
-        let input = "";
-        if (promptTexts || // we have an explicit request to prompt the user
-            JSON.stringify(updates).includes("%input%") || // we have an update action mentioning %input%
-            (!actions.length && ["actions_content", "actions_description"].includes(button)) // a default action that needs user input to edit field
-        ) {
-            let field = button.slice(8);
-            let questionText = "Please enter a new value for " + button.slice(8) + ":";
-            let defaultText = item[button.slice(8)] || "";
-            if (promptTexts)
-                [questionText, defaultText] = promptTexts.split("|");
-            // some work so we can use field values in the defaultText:
-            field = /(?<=%).*(?=%)/.exec(defaultText);
-            if (field && item[field])
-                defaultText = defaultText.replaceAll("%" + field + "%", item[field]);
-            input = window.prompt(questionText, defaultText) || "";
-        }
-
-        if (updates.length || labelChanges.length) {
-            let newIndex = commands.push({
-                "type": "item_update",
-                "uuid": this.getUUID(),
-                "args": {
-                    "id": item.id,
-                    "labels": labels,
-                },
-            }) - 1;
-            let newObj = {};
-            Object.entries(updates).map(([key, valueObj]) => {
-                let value = Object.keys(valueObj)[0];
-                // leaving out "id" and "labels" deliberately, those are handled separately:
-                if (["content", "description", "due", "priority", "collapsed",
-                    "assigned_by_uid", "responsible_uid", "day_order", ""]
-                    .includes(value)) {
-                    newObj = { [value]: replaceMultiple(valueObj[value], mapReplaces, item[value], input) };
-                    Object.assign(commands[newIndex].args, newObj);
-                }
-            });
-        }
-
-        if (emphasis.length) {
-            this.emphasizeItem(item, emphasis);
-            //this.itemsEmphasized[item.id]="special";
-        }
-        if (actions.includes("move")) {
-            let newIndex = commands.push({
-                "type": "item_move",
-                "uuid": this.getUUID(),
-                "args": {
-                    "id": item.id,
-                },
-            }) - 1;
-            // Move to next section. To move to "no section" Todoist expects a move to the project...:
-            commands[newIndex].args[nextSection !== item.project_id ? "section_id" : "project_id"] = nextSection;
-        }
-
-        let default_actions = {
-            "actions_close": { 'type': 'item_close', 'uuid': this.getUUID(), 'args': { 'id': item.id } },
-            "actions_dbl_close": {},
-            "actions_longpress_close": {},
-            "actions_content": { "type": "item_update", "uuid": this.getUUID(), "args": { "id": item.id, "content": input } },
-            "actions_dbl_content": {},
-            "actions_longpress_content": {},
-            "actions_description": { "type": "item_update", "uuid": this.getUUID(), "args": { "id": item.id, "description": input } },
-            "actions_dbl_description": {},
-            "actions_longpress_description": {},
-            "actions_label": {},
-            "actions_dbl_label": {},
-            "actions_longpress_label": {},
-            "actions_delete": { 'type': 'item_delete', 'uuid': this.getUUID(), 'args': { 'id': item.id } },
-            "actions_dbl_delete": {},
-            "actions_longpress_delete": {},
-            "actions_uncomplete": { 'type': 'item_uncomplete', 'uuid': this.getUUID(), 'args': { 'id': item.id } },
-            "actions_dbl_uncomplete": {},
-            "actions_longpress_uncomplete": {},
-        }
-
-        // actions without arguments, and which get executed just like the defaults:
-        Array.from(["close", "uncomplete", "delete"]).
-            forEach(a => {
-                if (actions.includes(a) &&
-                    ((a != null || a.length !== 0)))
-                    commands.push(default_actions["actions_" + a]);
-            })
-        if (!actions.length && default_actions[button])
-            commands.push(default_actions[button]);
-
-        if (confirm) {
-            if (!window.confirm(confirm))
-                return [[], [], "", ""];
-        }
-        if (allow.length && !allow.includes(this.hass.user.name)) {
-            return [[], [], "", ""];
-        }
-        // 'match' actions [field, value, action_domystuff] call other actions conditionally:
-        if (matches.length === 1) matches.push = 'on'; // default value
-        if (matches.length === 2) matches.push = ''; // default null action
-        if (matches.length === 3) matches.push = ''; // default null else action
-        matches.forEach(([field, value, subAction, subElseAction]) => {
-            var stateToMatch, attrName;
-            // for HASS states such as input_booleans.allowed etc:
-            if (field.includes('.')) {
-                attrName = field.includes('#') ? field.split('#')[1] : '';
-                if (!attrName) {
-                    stateToMatch = this?.hass?.states[field.split('#')[0]]?.state || undefined;
-                } else {
-                    stateToMatch = this?.hass?.states[field.split('#')[0]]?.attributes[attrName] || undefined;
-                }
-                if ((stateToMatch === value) && subAction.length) {
-                    this.itemAction(item, subAction);
-                    //return [ [] , [] , "", "" ];
-                }
-                if ((stateToMatch !== value) && subElseAction.length) {
-                    this.itemAction(item, subElseAction);
-                    //return [ [] , [] , "", "" ];
-                }
-            }
-            // for tests against item values (todoist fields)
-            else if ((Array.isArray(item[field]) && item[field].includes(value)) ||
-                item[field] == value)
-                // we have a match, action is executed like a sub-routine:
-                this.itemAction(item, subActions);
-        })
-        return [commands, adds, automation, toast];
-    }
-
-    changeLabelsUINow(item, labelsBeingAdded, labelsBeingRemoved) {
-        if (!labelsBeingAdded?.length && !labelsBeingRemoved?.length) return;
-        // Fetch item from hass state
-        let state = this.hass.states[this.config.entity] || undefined;
-        let items = state?.attributes?.tasks || [];
-        const itemIndex = items.findIndex(i => i.id === item.id);
-        if (itemIndex === -1) return;
-        let currentLabels = items[itemIndex].labels || [];
-        // Remove specified labels
-        currentLabels = currentLabels.filter(label => !labelsBeingRemoved.includes(label));
-        // Add specified labels, avoiding duplicates
-        currentLabels = [...new Set([...currentLabels, ...labelsBeingAdded])];
-        // Update the item in the items array
-        items = [
-            ...items.slice(0, itemIndex),
-            { ...items[itemIndex], labels: currentLabels },
-            ...items.slice(itemIndex + 1),
-        ];
-        if (false) { // some extra logging for debugging
-            const sectionIdMap = {
-                '138899413': 'Monday',
-                '138899729': 'Tuesday?',
-                '138899730': 'Wednesday?',
-                '138899731': 'Thursday?',
-                '138899732': 'Friday?',
-                '138899735': 'Saturday',
-                '138899732': 'Sunday?',
-            };
-            const filterSectionIds = ['138899413']; //focus debugging on a single day
-            const briefItems = items
-                .filter(item => filterSectionIds.includes(String(item.section_id)))
-                .map(({ content, labels, section_id, statusFromLabelCriteria }) => ({
-                    content,
-                    labels: labels || [],
-                    section_id: sectionIdMap[String(section_id)] || String(section_id) || 'Unknown',
-                    status: statusFromLabelCriteria || '---'
-                }));
-            console.table(briefItems);
-        }
-        // Trigger re-render
-        this.items = items;
-        //this.requestUpdate();
-    }
-
-    async showToast(message, duration, defer = 0) {
-        if (!message) return;
-        const toast = this.shadowRoot.querySelector("#powertodoist-toast");
-        if (toast) {
-            setTimeout(() => {
-                toast.innerText = toast.innerText + ' ' + message;
-                this.toastText = message;
-                toast.style.display = 'block';
-            }, 1000);
-            setTimeout(() => {
-                toast.innerText = "";
-                this.toastText = "";
-                toast.style.display = 'none';
-            }, duration + 1000);
-        }
-    }
-
-    emphasizeItem(item, className) {
-        var itemNode = this.shadowRoot.querySelector("#item_" + item.id);
-        if (itemNode) {
-            itemNode.classList.add("powertodoist-" + className);
-            setTimeout(() => {
-                itemNode.classList.remove("powertodoist-" + className);
-            }, 3000);
-        }
-    }
-
-    async processAdds(adds) {
-        for (const item of adds) {
-            this.hass.callService('rest_command', 'todoist', {
-                url: 'quick/add',
-                payload: 'text=' + item,
-            });
-        }
-    }
-    // Usually this is triggered by UI event handlers: click, dbl_click, etc
-    // But also via 'match' actions
-    itemAction(item, action) {
-        //var myConfig = this.parseConfig(this.config);
-        if (item === undefined) return; // will happen when renderLabels is used for the card-level labels
-        action = action.toLowerCase();
-        let commands = [], adds = [], automation = [];
-        let toast = "";
-        // start by getting everything from config:
-        [commands, adds, automation, toast] = this.buildCommands(item, "actions_" + action);
-        // show toast if it exists:
-        this.showToast(toast, 3000);
-        // deal with adds (this runs asynchronously to avoid blocking us)
-        this.processAdds(adds);
-        // deal with commands:
-        this.hass.callService('rest_command', 'todoist', {
-            url: 'sync',
-            payload: 'commands=' + JSON.stringify(commands),
-        })
-            .then(response => {
-                // specific post-actions:
-                // Extract the actual command type from the commands array
-                const commandTypes = commands.map(cmd => cmd.type);
-                // Handle UI updates based on command types, not action names
-                if (commandTypes.includes('item_close')) {
-                    if (this.itemsJustCompleted.length >= this.config.show_completed) {
-                        this.itemsJustCompleted.splice(0, this.itemsJustCompleted.length - this.config.show_completed + 1);
-                    }
-                    this.itemsJustCompleted.push(item);
-                } else if (commandTypes.includes('item_uncomplete') || commandTypes.includes('item_delete')) {
-                    this.itemsJustCompleted = this.itemsJustCompleted.filter(v => v.id != item.id);
-                }
-                /*switch (action) {
-                    case 'close':
-                        if (this.itemsJustCompleted.length >= this.config.show_completed) {
-                            this.itemsJustCompleted.splice(0, this.itemsJustCompleted.length - this.config.show_completed + 1);
-                        }
-                        this.itemsJustCompleted.push(item);
-                        break;
-                    case 'content':
-                        break;
-                    case 'delete':
-                        break;
-                    case 'unlist_completed': // removes from internal list
-                    case 'uncomplete': // removes from internal list and uncloses in todoist
-                        this.itemsJustCompleted = this.itemsJustCompleted.filter(v => {
-                            return v.id != item.id;
-                        });
-                        break;
-                    default:
-                        break;
-                }*/
-                // Update the entity after processing the response
-                return this.hass.callService('homeassistant', 'update_entity', {
-                    entity_id: this.config.entity
-                });
-            })
-            .catch(err => {
-                console.error('Error in Todoist operation:', err);
-                throw err; // Re-throw to propagate the error
-            });
-        // deal with automations:
-        if (automation.length) {
-            this.hass.callService(
-                automation.includes('script.') ? 'homeassistant' : 'automation',
-                automation.includes('script.') ? 'turn_on' : 'trigger',
-                { entity_id: automation, }
-            ).then(function () {
-                console.log('Automation triggered successfully from todoist JS!');
-                this.hass.callService('homeassistant', 'update_entity', { entity_id: this.config.entity, });
-            }).catch(function (error) {
-                console.error('Error triggering automation from todoist JS:', error);
-            });
-        }
-    }
-
-    itemUnlistCompleted(item) {
-        this.itemsJustCompleted = this.itemsJustCompleted.filter(v => {
-            return v.id != item.id;
-        });
-        this.hass.callService('homeassistant', 'update_entity', {
-            entity_id: this.config.entity,
-        });
-    }
-
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------------------------------------
-
-    filterDates(items) {
-        if ((typeof this.myConfig.sort_by_due_date !== 'undefined') && (this.myConfig.sort_by_due_date !== false)) {
-            items.sort((a, b) => {
-                if (!(a.due && b.due)) return 0;
-                if (this.myConfig.sort_by_due_date == 'ascending')
-                    return (new Date(a.due.date)).getTime() - (new Date(b.due.date)).getTime();
-                else
-                    return (new Date(b.due.date)).getTime() - (new Date(a.due.date)).getTime();
-            });
-        }
-
-        if ((typeof this.myConfig.filter_show_dates_starting !== 'undefined') ||
-            (typeof this.myConfig.filter_show_dates_ending !== 'undefined')) {
-            let startCompare = Number(this.myConfig.filter_show_dates_starting);
-            let endCompare = Number(this.myConfig.filter_show_dates_ending);
-            if ((typeof this.myConfig.filter_show_dates_starting == 'string') && !isNaN(startCompare))
-                // we have a number provided as string, signaling days precision
-                startCompare = new Date().setHours(0, 0, 0, 0) + (startCompare * 24 * 60 * 60 * 1000);
-            else
-                startCompare = new Date().getTime() + (startCompare * 1 * 60 * 60 * 1000);
-            if ((typeof this.myConfig.filter_show_dates_ending == 'string') && !isNaN(endCompare))
-                // we have a number provided as string, signaling days precision
-                endCompare = new Date().setHours(23, 59, 59, 999) + (endCompare * 24 * 60 * 60 * 1000);
-            else
-                endCompare = new Date().getTime() + (endCompare * 1 * 60 * 60 * 1000);
-            var dItem, dItem1, dItem2;
-            items = items.filter(item => {
-                if (!item.due) return (this.myConfig.filter_show_dates_empty !== false);
-                let duration = 0;
-                if (item.duration) // the only way to set this is through the API...
-                    duration = item.duration.unit == 'day' ? // it's either 'day' or 'minute'
-                        (item.duration.amount * 24 * 60 * 60 * 1000) :
-                        (item.duration.amount * 1 * 1 * 60 * 1000);
-                if (/^\d{4}-\d{2}-\d{2}$/.test(item.due.date)) {
-                    // adds time if missing
-                    dItem1 = (new Date(item.due.date + 'T23:59:59')).getTime();
-                    dItem2 = (new Date(item.due.date + 'T00:00:00')).getTime();
-                } else {
-                    dItem1 = (new Date(item.due.date)).getTime();
-                    dItem2 = dItem1;
-                }
-                // 'duration' logic: items that are spread over more than just one point in time;
-                // only used with start=0 and end=null, so you can use the due date for a start time,
-                // using duration to "expire" the task
-                if (isNaN(endCompare) && duration) {
-                    startCompare -= duration;
-                    endCompare = new Date().getTime();
-                }
-                let passStart = isNaN(startCompare) ? true : startCompare <= dItem1; // items passing out of view
-                let passEnd = isNaN(endCompare) ? true : endCompare >= dItem2; // items coming in to view
-                return passStart && passEnd;
-            });
-        }
-        return items;
-    }
-
-    filterPriority(items) {
-        if ((typeof this.myConfig.sort_by_priority !== 'undefined') && (this.myConfig.sort_by_priority !== false)) {
-            items.sort((a, b) => {
-                if (!(a.priority && b.priority)) return 0;
-                if (this.myConfig.sort_by_priority === 'ascending')
-                    return a.priority - b.priority;
-                else
-                    return b.priority - a.priority;
-            });
-        }
-        return items;
-    }
-
-    assessLabelCriteriaForItem(item, criteria, defaultIfNoCriteria, cardLabels) {
-        if (!criteria) return defaultIfNoCriteria;
-        let includes = 0;
-        let excludes = 0;
-        criteria.forEach(label => {
-            let l = label;
-            if (l.startsWith("!")) {
-                excludes += item.labels.includes(l.slice(1));
-            } else {
-                includes += item.labels.includes(l) || (l === "*");
-                includes += (l === "!*") && (item.labels.length === 0);
-                if (!cardLabels?.includes(l)) cardLabels.push(l);
-            }
-        });
-        return (excludes === 0) && (includes > 0);
-    }
-
-    getIconName(icons, baseIndex, item) {
-        // Default to base icon
-        let chosen = icons[baseIndex];
-        // If label-based override is enabled, use index 4 or 5
-        if (
-            this.config.status_from_labels !== undefined &&
-            item?.statusFromLabelCriteria !== undefined &&
-            icons.length >= 5
-        ) {
-            chosen = item.statusFromLabelCriteria ? icons[4] : icons[5];
-        }
-        return chosen; // { name, color }
-    }
-
-    formatDueDate(dueDate, configFormat) {
-        // Default format if none provided
-        const wantMask = configFormat || "dd-mmm H'h'MM";
-
-        // If it's a named mask (e.g., "default", "fullDate"), resolve it
-        const resolvedMask = dateFormat.masks[wantMask] || wantMask;
-
-        // Format the date with the resolved mask
-        const formatted = dateFormat(dueDate, resolvedMask);
-
-        // Prepend emoji and return
-        return "­­🗓" + formatted;
-    }
-
-    renderTemplate(templateStr) {
-        if (!templateStr) {
-            return '';
-        }
-        try {
-            // Step 1: Expand Jinja-like expressions ({{ ... }})
-            const expanded = this.expandJinjaExpressions(templateStr);
-
-            // Step 2: Parse as Markdown
-            return marked.parse(expanded);
-        } catch (error) {
-            console.warn('Template rendering failed:', error);
-            return marked.parse(templateStr);
-        }
-    }
-
-    expandJinjaExpressions(str) {
-        // Match {{ ... }} patterns
-        return str.replace(/\{\{(.+?)\}\}/g, (match, expr) => {
-            try {
-                return this.evaluateExpression(expr.trim());
-            } catch (e) {
-                console.warn(`Failed to evaluate expression: ${expr}`, e);
-                return `[${expr}]`; // Graceful fallback
-            }
-        });
-    }
-
-    evaluateExpression(expr) {
-        // Handle now().strftime() pattern for dates
-        const dateMatch = expr.match(/now\(\)\.strftime\(['"](.+?)['"]\)/);
-        if (dateMatch) {
-            const pythonFormat = dateMatch[1];
-            return this.formatDatePythonStyle(new Date(), pythonFormat);
-        }
-
-        // Handle user variable
-        if (expr === 'user') {
-            return this.hass?.user?.name || 'unknown';
-        }
-
-        // Handle states('entity_id') pattern
-        const statesMatch = expr.match(/states\(['"](.+?)['"]\)/);
-        if (statesMatch) {
-            const entityId = statesMatch[1];
-            const state = this.hass?.states?.[entityId];
-            return state?.state || 'unavailable';
-        }
-
-        const stateAttrMatch = expr.match(/state_attr\(['"](.+?)['"],\s*['"](.+?)['"]\)/);
-        if (stateAttrMatch) {
-            const entityId = stateAttrMatch[1];
-            const attrName = stateAttrMatch[2];
-            const state = this.hass?.states?.[entityId];
-            return state?.attributes?.[attrName] || '';
-        }
-
-        // Future extensions: groups, filters, etc.
-        // Example stub for groups:
-        // if (expr.startsWith('groups.')) {
-        //     const groupName = expr.split('.')[1];
-        //     return this.getGroupMembers(groupName).join(', ');
-        // }
-
-        throw new Error(`Unsupported expression: ${expr}`);
-    }
-
-    formatDatePythonStyle(date, pythonFormat) {
-        // Map Python strftime tokens to dateFormat library tokens
-        // Python -> dateFormat mapping:
-        // %d -> dd (day with zero-padding)
-        // %m -> mm (month with zero-padding)
-        // %Y -> yyyy (4-digit year)
-        // %H -> HH (24-hour with zero-padding)
-        // %M -> MM (minutes with zero-padding)
-        // %S -> ss (seconds with zero-padding)
-        // %B -> mmmm (full month name)
-        // %b -> mmm (abbreviated month name)
-        // %A -> dddd (full weekday name)
-        // %a -> ddd (abbreviated weekday name)
-        // %I -> hh (12-hour with zero-padding)
-        // %p -> TT (AM/PM)
-
-        let dateFormatMask = pythonFormat
-            .replace(/%d/g, 'dd')
-            .replace(/%m/g, 'mm')
-            .replace(/%Y/g, 'yyyy')
-            .replace(/%H/g, 'HH')
-            .replace(/%M/g, 'MM')
-            .replace(/%S/g, 'ss')
-            .replace(/%B/g, 'mmmm')
-            .replace(/%b/g, 'mmm')
-            .replace(/%A/g, 'dddd')
-            .replace(/%a/g, 'ddd')
-            .replace(/%I/g, 'hh')
-            .replace(/%p/g, 'TT');
-
-        // Use the existing dateFormat library
-        return dateFormat(date, dateFormatMask);
-    }
-
-    render() {
-        if (this.hass === undefined) {
-            return html`Home Assistant is restarting. Please wait a few seconds...`;
-        }
-        let state = this.hass.states[this.config.entity] || undefined;
-        if (state?.attributes === undefined) {
-            return html`Powertodoist sensors don't have any data yet. Please wait a few seconds and refresh. [todoist sensor] `;
-        }
-        var label_colors = this.hass.states["sensor.label_colors"];
-        label_colors = label_colors?.attributes?.label_colors;
-        if (!label_colors) {
-            return html`Powertodoist sensors don't have any data yet. Please wait a few seconds and refresh. [label_colors sensor] `;
-        }
-        // if (!this.hass.states["sensor.dow"] || this.hass.states['sensor.dow']?.state === "unknown") {
-        // return html`Powertodoist sensors don't have any data yet. Please wait a few seconds and refresh. [days of week sensor] `;
-        // }
-
-        this.myConfig = this.parseConfig(this.config);
-
-        // Build icon config: support "icon" or "icon:color" form
-        var rawIcons = (this.config.icons && this.config.icons.length >= 4)
-            ? this.config.icons
-            : [
-                "checkbox-marked-circle-outline:green",
-                "circle-medium",
-                "plus-outline:blue",
-                "trash-can-outline:red",
-                "checkbox-marked-circle-outline",
-                "checkbox-blank-circle-outline"
-            ];
-
-        // Normalize into array of { name, color }
-        var icons = rawIcons.map(str => {
-            const [name, color] = str.split(":");
-            return { name, color: color || "" };
-        });
-        let items = state.attributes.tasks || []; //changed from .items to .tasks
-
-        items = this.filterDates(items);
-        items = this.filterPriority(items);
-
-        // filter by section:
-        let section_name2id = [];
-        if (!this.myConfig.filter_section_id && this.myConfig.filter_section) {
-            //let state = this.hass.states[this.myConfig.entity].attributes;
-            state.attributes?.sections.map(s => {
-                section_name2id[s.name] = s.id;
-            });
-        }
-        let section_id = this.myConfig.filter_section_id || section_name2id[this.myConfig.filter_section] || undefined;
-        if (this.myConfig?.filter_section === '!*') { // filter for sectionless items
-            section_id= -1;
-        }
-        if (section_id) {
-            items = items.filter(item => {
-                return (item.section_id === section_id) ||
-                    (item.section_id === null && section_id == -1);
-            });
-        }
-        // filter items matching filter_labels criteria
-        var cardLabels = [];
-        items = items.filter(item => this.assessLabelCriteriaForItem.call(this, item, this.myConfig?.filter_labels, true, cardLabels));
-
-        // mark items matching status_from_labels criteria by storing it as an extra item property
-        items = items.map(item => ({
-            ...item,
-            statusFromLabelCriteria: this.assessLabelCriteriaForItem.call(this, item, this.myConfig?.status_from_labels, false, [])
-        }));
-
-        // Starts with named section or default, tries to get section name from id, but lets friendly_name override it:
-        let cardName = this.myConfig.filter_section || "ToDoist";
-        try { cardName = state.attributes.sections.find(s => { return s.id === section_id }).name } catch (error) { }
-        cardName = this.myConfig.friendly_name || cardName;
-
-        this.generateStyles();
-
-        // https://lit.dev/docs/v1/lit-html/writing-templates/#repeating-templates-with-looping-statements
-        const topMarkdown = this.renderTemplate(this.config.markdown_top_content);
-        const bottomMarkdown = this.renderTemplate(this.config.markdown_bottom_content);
-
-        let rendered = html`<ha-card class="${this.myConfig.accent ? 'left-accent' : ''}">
-            ${(this.myConfig.show_header === undefined) || (this.myConfig.show_header !== false)
-                ? html`<h1 class="card-header">
-                    <div class="name">${cardName}
-                    ${(this.myConfig.show_card_labels === undefined) || (this.myConfig.show_card_labels !== false)
-                        ? html`${this.renderLabels(undefined, (cardLabels.length == 1 ? cardLabels : []), [], label_colors)}`
-                        : html``
-                    }
-                    </div>
-                    </h1>
-                    <div id="powertodoist-toast">${this.toastText}</div>`
-                : html``}
-            ${this.config.markdown_top_content ? html`<div class="top-markdown" .innerHTML=${topMarkdown}></div>` : ''}
-            <div class="list-container">
-            <div class="left-accentpgr"></div>
-                <div class="powertodoist-list">
-                ${items.length
-                ? items.map(item => {
-                    return html`<div class="powertodoist-item" .id=${"item_" + item.id}>
-                            ${(this.myConfig.show_item_close === undefined) || (this.myConfig.show_item_close !== false)
-                            ? html`<ha-icon-button
-                                    class="powertodoist-item-close"
-                                    @pointerdown=${(e) => this._lpStart(item, "longpress_close")}
-                                    @pointerup=${(e) => this._lpEnd(item, "close", "dbl_close")}
-                                    @pointercancel=${this._lpCancel}
-                                    @pointerleave=${this._lpCancel} >
-                                    <ha-icon
-                                        .icon=${"mdi:" + this.getIconName(icons, 0, item).name}
-                                        style="color:${this.getIconName(icons, 0, item).color}"
-                                    ></ha-icon>
-                                </ha-icon-button>`
-                            : html`<ha-icon
-                                        .icon=${"mdi:" + icons[1].name}
-                                        style=${icons[1].color ? `color:${icons[1].color};` : ""}
-                                    ></ha-icon>`
-                        }
-                            <div class="powertodoist-item-text"><div
-                                @pointerdown=${(e) => this._lpStart(item, "longpress_content")}
-                                @pointerup=${(e) => this._lpEnd(item, "content", "dbl_content")}
-                                @pointercancel=${this._lpCancel}
-                                @pointerleave=${this._lpCancel}
-                            ><span class="powertodoist-item-content ${(this.itemsEmphasized[item.id]) ? css`powertodoist-special` : css``}" >
-                            ${item.content}</span></div>
-                            ${(this.myConfig.show_item_description ?? true) && item.description?.trim()
-    //                      ${((this.myConfig.show_item_description === undefined) || (this.myConfig.show_item_description !== false)) && item.description
-                            ? html`<div
-                                    @pointerdown=${(e) => this._lpStart(item, "longpress_description")}
-                                    @pointerup=${(e) => this._lpEnd(item, "description", "dbl_description")}
-                                    @pointercancel=${this._lpCancel}
-                                    @pointerleave=${this._lpCancel}
-                                ><span class="powertodoist-item-description">${item.description}</span></div>`
-                            : html``}
-                            ${this.renderLabels(
-                                item,
-                                this.myConfig.show_dates && item.due
-                                    ? this.formatDueDate(item.due.date, this.config.date_format)
-                                    : [],
-                                [...item.labels].filter(String),
-                                // [this.myConfig.show_dates && item.due ? dateFormat(item.due.date, "🗓 dd-mmm H'h'MM") :
-                                // [], ...item.labels].filter(String), // filter removes the empty []s
-                                // exclusions:
-                                [...(cardLabels.length == 1 ? cardLabels : []), // card labels excluded unless more than one
-                                ...item.labels.filter(l => l.startsWith("_"))], // "_etc" labels excluded
-                                label_colors)}
-                        </div>
-                        ${(this.myConfig.show_item_delete === undefined) || (this.myConfig.show_item_delete !== false)
-                            ? html`<ha-icon-button
-                                class="powertodoist-item-delete"
-                                @pointerdown=${(e) => this._lpStart(item, "longpress_delete")}
-                                @pointerup=${(e) => this._lpEnd(item, "delete", "dbl_delete")}
-                                @pointercancel=${this._lpCancel}
-                                @pointerleave=${this._lpCancel} >
-                                <ha-icon
-                                    .icon=${"mdi:" + icons[3].name}
-                                    style=${icons[3].color ? `color:${icons[3].color};` : ""}
-                                ></ha-icon>
-                            </ha-icon-button>`
-                            : html``}
-                        </div>
-                    </div>`;
-                })
-                : html`<div class="powertodoist-list-empty">No uncompleted tasks!</div>`}
-                ${this.renderLowerPart(icons)}
-                </div>
-            </div>
-            ${this.config.markdown_bottom_content ? html`<div class="bottom-markdown" .innerHTML=${bottomMarkdown}></div>` : ''}
-            ${this.renderFooter()}
-            </ha-card>`;
-        return rendered;
-    }
-
-    generateStyles() {
-        var style = document.createElement('style');
-        style.id = 'customPowerTodoistStyle';
-        let customStyle = this.myConfig.style || '';
-
-        try { this.shadowRoot.getElementById(style.id).remove(); } catch (error) { }
-
-        //if (this.myConfig.accentpgr) {
-        //    this.myConfig.style = (this.myConfig.style ?? '') + '.left-accentpgr { background-color: ' + this.myConfig.accentpgr + '!important; width: 6px!important; }';
-        //}
-        if (this.myConfig.accent) {
-            // Use border-left for accent: solid color edge, no width added
-            const accentStyle = `.left-accent { border-left: 6px solid ${this.myConfig.accent} !important; padding-left: 0 !important; margin-left: 0 !important; } `;
-            customStyle = customStyle + accentStyle;
-        }
-
-        if (customStyle) {
-            style.innerHTML = customStyle;
-            this.shadowRoot.appendChild(style);
-        }
-
-    }
-
-    generateExtraLabels(labels, label_colors) {
-        if (label_colors === undefined) return [];
-        var extraLabels = [];
-        if (this.myConfig.extra_labels) {
-            this.myConfig.extra_labels.forEach(l => {
-                //let l = label;
-
-                let parts = l.split(/[:+]/).map(s => s.trim());
-                let firstPart = parts[0];
-                let filteredParts = [];
-                let mainParts = l.split(":").map(s => s.trim());
-                let plusCount = (mainParts.length > 1) ? (mainParts[1].match(/\+/g) || []).length + 1 : 0;
-                for (let i = 1; i < parts.length; i++) {
-                    if (labels.includes(parts[i])) {
-                        filteredParts.push(parts[i]);
-                    }
-                }
-
-                if (mainParts.length > 1 && mainParts[1].startsWith("+")) {
-                    filteredParts = (filteredParts.length > 0) ? [filteredParts.length] : [];
-                }
-                if ((filteredParts.length > 0) || // we found something when filtering or counting a list
-                    (!l.includes(':'))) { // there was no list, put static label in directly
-                    let outlineLabel = label_colors.filter(lc => lc.name === firstPart + '_outline');
-                    let theColor = (label_colors.find(lc => lc.name === firstPart)?.color || "blue");
-                    if (outlineLabel.length > 0) {
-                        // strip "_outline" which has 8 chars, we'll then re-add it to the end
-                        theColor = outlineLabel[0].color;//.slice(0, -8);
-                    }
-                    let finalLabel = firstPart + ": " + filteredParts.join("+") + (outlineLabel.length > 0 ? '_outline' : '');
-                    extraLabels.push(finalLabel);
-                    if (!label_colors.some(item => item.name === finalLabel))
-                        label_colors.push({ name: finalLabel, color: theColor });
-                }
-            });
-        }
-        return extraLabels;
-    }
-
-    renderLabels(item, date, labels, exclusions, label_colors) {
-        var extraLabels = this.generateExtraLabels(labels, label_colors);
-        labels = [date, ...labels, ...extraLabels].filter(String);
-        // prepend a date as a "fake" label:
-        if ((item !== undefined) && (this.config.show_item_labels === false)) {
-            labels = this.myConfig.show_dates && item.due ? [date, ...extraLabels] : [...extraLabels];
-        }
-
-        let rendered = html`
-            ${(labels.length - (exclusions?.length ?? 0) > 0)
-                ? html`<div class="labelsDiv"><ul class="labels">${labels.map(label => {
-                    if (exclusions.includes(label)) return html``;
-                    let isOutline = label.endsWith('_outline');
-                    let displayLabel = isOutline ? label.slice(0, -8) : label; // "_outline" is 8 chars
-                    let filteredColors = label_colors.filter(lc => lc.name === label);
-                    let colorKey = filteredColors.length
-                        ? filteredColors[0].color
-                        : "var(--primary-background-color)";
-                    let color = todoistColors[colorKey] || colorKey;
-                    let style = isOutline
-                        ? `border: 2px solid ${color}; background: transparent; color: ${color};`
-                        : `background-color: ${color}; ${label[0] == "\ud83d" ? "color: var(--primary-text-color);" : ""}`; // \ud83d is "🗓" that marks a date
-                    return html`<li
-                    class=${extraLabels.includes(label) ? "extraLabel" : ""}
-                    .style=${style}
-                    @pointerdown=${(e) => this._lpStart(item, "longpress_label")}
-                    @pointerup=${(e) => this._lpEnd(item, "label", "dbl_label")}
-                    @pointercancel=${this._lpCancel}
-                    @pointerleave=${this._lpCancel}
-                    >
-                    <span>${displayLabel}</span></li>`;
-                })}</ul></div>`
-                : html``}
-        `;
-        return rendered;
-    }
-    renderLowerPart(icons) {
-        // this is the grey area below where the recently completed items appear, so they can be uncompleted
-        let rendered = html`
-        ${this.myConfig.show_completed && this.itemsJustCompleted
-                ? this.itemsJustCompleted.map(item => {
-                    return html`<div class="powertodoist-item todoist-item-completed">
-                        ${(this.myConfig.show_item_close === undefined) || (this.myConfig.show_item_close !== false)
-                            ? html`<ha-icon-button
-                                class="powertodoist-item-close"
-                                 @pointerdown=${(e) => this._lpStart(item, "longpress_uncomplete")}
-                                @pointerup=${(e) => this._lpEnd(item, "uncomplete", "dbl_uncomplete")}
-                                @pointercancel=${this._lpCancel}
-                                @pointerleave=${this._lpCancel} >
-                                <ha-icon
-                                    .icon=${"mdi:" + icons[2].name}
-                                    style=${icons[2].color ? `color:${icons[2].color};` : ""}
-                                ></ha-icon>
-                                </ha-icon-button>`
-                            : html`<ha-icon
-                                        .icon=${"mdi:" + icons[0].name}
-                                        style=${icons[0].color ? `color:${icons[0].color};` : ""}
-                                    ></ha-icon>`
-                        }
-                        <div class="powertodoist-item-text">
-                            ${item.description
-                            ? html`<span class="powertodoist-item-content">${item.content}</span>
-                                    <span class="powertodoist-item-description">${item.description}</span>`
-                            : item.content}
-                        </div>
-                        ${(this.myConfig.show_item_delete === undefined) || (this.myConfig.show_item_delete !== false)
-                            ? html`<ha-icon-button
-                                class="powertodoist-item-delete"
-                                @pointerdown=${(e) => this._lpStart(item, "longpress_unlist_completed")}
-                                @pointerup=${(e) => this._lpEnd(item, "unlist_completed", "dbl_unlist_completed")}
-                                @pointercancel=${this._lpCancel}
-                                @pointerleave=${this._lpCancel}
-                                >
-                                <ha-icon
-                                    .icon=${"mdi:" + icons[3].name}
-                                    style=${icons[3].color ? `color:${icons[3].color};` : ""}
-                                ></ha-icon>
-                            </ha-icon-button>`
-                            : html``}
-                    </div>`;
-                })
-                : html``}
-        `;
-        return rendered;
-    }
-    renderFooter() {
-        let rendered = html`
-            ${(this.myConfig.show_item_add === undefined) || (this.myConfig.show_item_add !== false)
-                ? html`<input
-            id="powertodoist-card-item-add"
-            type="text"
-            class="powertodoist-item-add"
-            placeholder="New item..."
-            enterkeyhint="enter"
-            @keyup=${this.itemAdd}
-        />`
-                : html``}
-        `;
-        if (this.myConfig.error) {
-            this.showToast(this.myConfig.error, 15000, 3000);
-            delete this.myConfig.error;
-        }
-        return rendered;
-    }
-    static get styles() {
-        return css`
-            .card-header {
-                padding-bottom: unset;
-            }
-           
-            .powertodoist-list {
-                display: flex;
-                padding: 15px;
-                flex-direction: column;
-                flex: 1; /* (For left accentpgr: list takes remaining space */
-            }
-
-            .list-container {
-                display: flex; /* place the accentpgr and list side by side */
-            }
-
-            .left-accentpgr {
-                width: 0px; /* accentpgr width, starts collapsed to hide */
-                background-color: #ff0000; /* accentpgr color */
-                border-radius: 3px; /* Rounded corners */
-                margin-right: 1px; /* Space between accentpgr and list */
-            }
-
-            /* affects child items:
-            .powertodoist-list > * {
-                border-left: 3px solid #ff0000;
-            }
-            */
-           
-            .powertodoist-list-empty {
-                padding: 15px;
-                text-align: center;
-                font-size: 24px;
-            }
-           
-            .powertodoist-item {
-                display: flex;
-                flex-direction: row;
-                line-height: 40px;
-            }
-                
-            .powertodoist-item-completed {
-                /* border: 1px solid red; border-width: 1px 1px 1px 1px; */
-                color: #808080;
-            }
-
-            .powertodoist-item-text {
-                flex: 1;
-                min-width: 0;
-            }
-            
-            .powertodoist-item-text, .powertodoist-item-text > span, .powertodoist-item-text > div {
-                font-size: 16px;
-                white-space: normal;      
-                word-break: break-word;   
-                overflow-wrap: break-word; 
-                /* border: 1px solid green; border-width: 1px 1px 1px 1px; */
-            }
-
-            .powertodoist-item-content {
-                display: block;
-                margin: -6px 0 -6px;
-                /* border: 1px solid red; border-width: 1px 1px 1px 1px; */
-            }
-
-            .powertodoist-item-description {
-                display: inline-block !important;
-                opacity: 0.5;
-                font-size: 12px !important;
-                line-height: 1.2 !important;
-                margin: 0;
-                overflow-wrap: break-word;
-                white-space: normal;
-            }
-           
-            .powertodoist-item-close {
-                /* border: 1px solid green; border-width: 1px 1px 1px 1px; */
-                color: #008000;
-            }
-            .powertodoist-item-completed .powertodoist-item-close {
-                color: #808080;
-            }
-           
-            .powertodoist-item-delete {
-                margin-left: auto;
-                color: #800000;
-                /* border: 1px solid red; border-width: 1px 1px 1px 1px; */
-            }
-
-            .powertodoist-item-completed .powertodoist-item-delete {
-                color: #808080;
-            }
-           
-            .powertodoist-item-add {
-                width: calc(100% - 30px);
-                height: 32px;
-                margin: 0 15px 30px;
-                padding: 10px;
-                box-sizing: border-box;
-                border-radius: 5px;
-                font-size: 16px;
-            }
-
-            .powertodoist-item ha-icon-button ha-icon {
-                margin-top: -24px;
-            }
-
-            .powertodoist-special {
-                font-weight: bolder;
-                color: green;
-            }
-
-            /*General Label Style*/
-            ul.labels {
-                /* font-family: Verdana,Arial,Helvetica,sans-serif;*/
-                font-weight: 100;
-                line-height: 13px;
-                padding: 0px 0px;
-                margin-top: 6px;
-                margin-bottom: 6px;
-            }
-
-            ul.labels li {
-                display: inline;
-                color: #CCCCCC;
-                float: left;
-                margin: -5px 2px 3px 0px;
-                height: 15px;
-                border-radius: 4px;
-            }
-
-            ul.labels li span {
-                /* background: url(label_front.gif) no-repeat center left;*/
-                font-size: 11px;
-                font-weight: normal;
-                white-space: nowrap;
-                padding: 0px 3px;
-                color: var(--ha-color-text-primary:);
-                vertical-align: top;
-                float: left;
-            }
-
-            ul.labels li a {
-                padding: 1px 4px 0px 11px;
-                padding-top /***/: 0px9; /*Hack for IE*/
-                /* background: url(labelx.gif) no-repeat center right; */
-                cursor: pointer;
-                border-left: 1px dotted white;
-                outline: none;
-            }
-
-            #powertodoist-toast {
-                position: relative;
-                bottom: 20px;
-                left: 40%;
-                transform: translateX(-50%);
-                background-color: #333;
-                color: #fff;
-                padding: 10px 20px;
-                border-radius: 14px;
-                border: 1px solid red;
-                /*border-width: 1px 1px 1px 1px;*/
-                z-index: 1;
-                display: none;
-                text-align: center;
-                margin: 15px 35px -30px 45px
-            }
-
-            .labelsDiv{
-                display: inline-flex;
-            }
-
-            /*
-            ul.labels li a:hover {
-                background: url(labelx_hover.gif) no-repeat center right;
-            }
-            */
-
-            .top-markdown {
-                padding: 0 16px 16px 16px !important; 
-                font-size: 14px;
-                line-height: 1.4;
-                user-select: text;
-            }
-            
-            .bottom-markdown {
-                padding: 16px 16px 0 16px !important;
-                font-size: 14px;
-                line-height: 1.4;
-                user-select: text;
-            }
-    `;
-    }
-}
-customElements.define('powertodoist-card-editor', PowerTodoistCardEditor);
-customElements.define('powertodoist-card', PowerTodoistCard);
-window.customCards = window.customCards || [];
-window.customCards.push({
-    preview: true,
-    type: 'powertodoist-card',
-    name: 'PowerTodoist Card',
-    description: 'Custom card to interact with Todoist items.',
-});
-console.info(
-    '%c POWERTODOIST-CARD ',
-    'color: white; background: orchid; font-weight: 700',
-);
-/*
- * Date Format 1.2.3
- * (c) 2007-2009 Steven Levithan <stevenlevithan.com>
- * MIT license
- *
- * Includes enhancements by Scott Trenda <scott.trenda.net>
- * and Kris Kowal <cixar.com/~kris.kowal/>
- *
- * Accepts a date, a mask, or a date and a mask.
- * Returns a formatted version of the given date.
- * The date defaults to the current date/time.
- * The mask defaults to dateFormat.masks.default.
- * https://blog.stevenlevithan.com/archives/javascript-date-format
+/**
+ * @license
+ * Copyright 2019 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
  */
-var dateFormat = function () {
-    var token = /d{1,4}|m{1,4}|yy(?:yy)?|([HhMsTt])\1?|[LloSZ]|"[^"]*"|'[^']*'/g,
-        timezone = /\b(?:[PMCEA][SDP]T|(?:Pacific|Mountain|Central|Eastern|Atlantic) (?:Standard|Daylight|Prevailing) Time|(?:GMT|UTC)(?:[-+]\d{4})?)\b/g,
-        timezoneClip = /[^-+\dA-Z]/g,
-        pad = function (val, len) {
-            val = String(val);
-            len = len || 2;
-            while (val.length < len) val = "0" + val;
-            return val;
-        };
-    // Regexes and supporting functions are cached through closure
-    return function (date, mask, utc) {
-        var dF = dateFormat;
-        // You can't provide utc if you skip other args (use the "UTC:" mask prefix)
-        if (arguments.length == 1 && Object.prototype.toString.call(date) == "[object String]" && !/\d/.test(date)) {
-            mask = date;
-            date = undefined;
+const J = globalThis, ue = J.ShadowRoot && (J.ShadyCSS === void 0 || J.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, pe = Symbol(), Te = /* @__PURE__ */ new WeakMap();
+let Xe = class {
+  constructor(e, t, s) {
+    if (this._$cssResult$ = !0, s !== pe) throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");
+    this.cssText = e, this.t = t;
+  }
+  get styleSheet() {
+    let e = this.o;
+    const t = this.t;
+    if (ue && e === void 0) {
+      const s = t !== void 0 && t.length === 1;
+      s && (e = Te.get(t)), e === void 0 && ((this.o = e = new CSSStyleSheet()).replaceSync(this.cssText), s && Te.set(t, e));
+    }
+    return e;
+  }
+  toString() {
+    return this.cssText;
+  }
+};
+const pt = (i) => new Xe(typeof i == "string" ? i : i + "", void 0, pe), ht = (i, ...e) => {
+  const t = i.length === 1 ? i[0] : e.reduce((s, r, n) => s + ((o) => {
+    if (o._$cssResult$ === !0) return o.cssText;
+    if (typeof o == "number") return o;
+    throw Error("Value passed to 'css' function must be a 'css' function result: " + o + ". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.");
+  })(r) + i[n + 1], i[0]);
+  return new Xe(t, i, pe);
+}, mt = (i, e) => {
+  if (ue) i.adoptedStyleSheets = e.map((t) => t instanceof CSSStyleSheet ? t : t.styleSheet);
+  else for (const t of e) {
+    const s = document.createElement("style"), r = J.litNonce;
+    r !== void 0 && s.setAttribute("nonce", r), s.textContent = t.cssText, i.appendChild(s);
+  }
+}, ve = ue ? (i) => i : (i) => i instanceof CSSStyleSheet ? ((e) => {
+  let t = "";
+  for (const s of e.cssRules) t += s.cssText;
+  return pt(t);
+})(i) : i;
+/**
+ * @license
+ * Copyright 2017 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+const { is: ft, defineProperty: gt, getOwnPropertyDescriptor: _t, getOwnPropertyNames: bt, getOwnPropertySymbols: yt, getPrototypeOf: $t } = Object, w = globalThis, Ae = w.trustedTypes, wt = Ae ? Ae.emptyScript : "", te = w.reactiveElementPolyfillSupport, O = (i, e) => i, oe = { toAttribute(i, e) {
+  switch (e) {
+    case Boolean:
+      i = i ? wt : null;
+      break;
+    case Object:
+    case Array:
+      i = i == null ? i : JSON.stringify(i);
+  }
+  return i;
+}, fromAttribute(i, e) {
+  let t = i;
+  switch (e) {
+    case Boolean:
+      t = i !== null;
+      break;
+    case Number:
+      t = i === null ? null : Number(i);
+      break;
+    case Object:
+    case Array:
+      try {
+        t = JSON.parse(i);
+      } catch {
+        t = null;
+      }
+  }
+  return t;
+} }, et = (i, e) => !ft(i, e), Se = { attribute: !0, type: String, converter: oe, reflect: !1, useDefault: !1, hasChanged: et };
+Symbol.metadata ?? (Symbol.metadata = Symbol("metadata")), w.litPropertyMetadata ?? (w.litPropertyMetadata = /* @__PURE__ */ new WeakMap());
+let M = class extends HTMLElement {
+  static addInitializer(e) {
+    this._$Ei(), (this.l ?? (this.l = [])).push(e);
+  }
+  static get observedAttributes() {
+    return this.finalize(), this._$Eh && [...this._$Eh.keys()];
+  }
+  static createProperty(e, t = Se) {
+    if (t.state && (t.attribute = !1), this._$Ei(), this.prototype.hasOwnProperty(e) && ((t = Object.create(t)).wrapped = !0), this.elementProperties.set(e, t), !t.noAccessor) {
+      const s = Symbol(), r = this.getPropertyDescriptor(e, s, t);
+      r !== void 0 && gt(this.prototype, e, r);
+    }
+  }
+  static getPropertyDescriptor(e, t, s) {
+    const { get: r, set: n } = _t(this.prototype, e) ?? { get() {
+      return this[t];
+    }, set(o) {
+      this[t] = o;
+    } };
+    return { get: r, set(o) {
+      const a = r == null ? void 0 : r.call(this);
+      n == null || n.call(this, o), this.requestUpdate(e, a, s);
+    }, configurable: !0, enumerable: !0 };
+  }
+  static getPropertyOptions(e) {
+    return this.elementProperties.get(e) ?? Se;
+  }
+  static _$Ei() {
+    if (this.hasOwnProperty(O("elementProperties"))) return;
+    const e = $t(this);
+    e.finalize(), e.l !== void 0 && (this.l = [...e.l]), this.elementProperties = new Map(e.elementProperties);
+  }
+  static finalize() {
+    if (this.hasOwnProperty(O("finalized"))) return;
+    if (this.finalized = !0, this._$Ei(), this.hasOwnProperty(O("properties"))) {
+      const t = this.properties, s = [...bt(t), ...yt(t)];
+      for (const r of s) this.createProperty(r, t[r]);
+    }
+    const e = this[Symbol.metadata];
+    if (e !== null) {
+      const t = litPropertyMetadata.get(e);
+      if (t !== void 0) for (const [s, r] of t) this.elementProperties.set(s, r);
+    }
+    this._$Eh = /* @__PURE__ */ new Map();
+    for (const [t, s] of this.elementProperties) {
+      const r = this._$Eu(t, s);
+      r !== void 0 && this._$Eh.set(r, t);
+    }
+    this.elementStyles = this.finalizeStyles(this.styles);
+  }
+  static finalizeStyles(e) {
+    const t = [];
+    if (Array.isArray(e)) {
+      const s = new Set(e.flat(1 / 0).reverse());
+      for (const r of s) t.unshift(ve(r));
+    } else e !== void 0 && t.push(ve(e));
+    return t;
+  }
+  static _$Eu(e, t) {
+    const s = t.attribute;
+    return s === !1 ? void 0 : typeof s == "string" ? s : typeof e == "string" ? e.toLowerCase() : void 0;
+  }
+  constructor() {
+    super(), this._$Ep = void 0, this.isUpdatePending = !1, this.hasUpdated = !1, this._$Em = null, this._$Ev();
+  }
+  _$Ev() {
+    var e;
+    this._$ES = new Promise((t) => this.enableUpdating = t), this._$AL = /* @__PURE__ */ new Map(), this._$E_(), this.requestUpdate(), (e = this.constructor.l) == null || e.forEach((t) => t(this));
+  }
+  addController(e) {
+    var t;
+    (this._$EO ?? (this._$EO = /* @__PURE__ */ new Set())).add(e), this.renderRoot !== void 0 && this.isConnected && ((t = e.hostConnected) == null || t.call(e));
+  }
+  removeController(e) {
+    var t;
+    (t = this._$EO) == null || t.delete(e);
+  }
+  _$E_() {
+    const e = /* @__PURE__ */ new Map(), t = this.constructor.elementProperties;
+    for (const s of t.keys()) this.hasOwnProperty(s) && (e.set(s, this[s]), delete this[s]);
+    e.size > 0 && (this._$Ep = e);
+  }
+  createRenderRoot() {
+    const e = this.shadowRoot ?? this.attachShadow(this.constructor.shadowRootOptions);
+    return mt(e, this.constructor.elementStyles), e;
+  }
+  connectedCallback() {
+    var e;
+    this.renderRoot ?? (this.renderRoot = this.createRenderRoot()), this.enableUpdating(!0), (e = this._$EO) == null || e.forEach((t) => {
+      var s;
+      return (s = t.hostConnected) == null ? void 0 : s.call(t);
+    });
+  }
+  enableUpdating(e) {
+  }
+  disconnectedCallback() {
+    var e;
+    (e = this._$EO) == null || e.forEach((t) => {
+      var s;
+      return (s = t.hostDisconnected) == null ? void 0 : s.call(t);
+    });
+  }
+  attributeChangedCallback(e, t, s) {
+    this._$AK(e, s);
+  }
+  _$ET(e, t) {
+    var n;
+    const s = this.constructor.elementProperties.get(e), r = this.constructor._$Eu(e, s);
+    if (r !== void 0 && s.reflect === !0) {
+      const o = (((n = s.converter) == null ? void 0 : n.toAttribute) !== void 0 ? s.converter : oe).toAttribute(t, s.type);
+      this._$Em = e, o == null ? this.removeAttribute(r) : this.setAttribute(r, o), this._$Em = null;
+    }
+  }
+  _$AK(e, t) {
+    var n, o;
+    const s = this.constructor, r = s._$Eh.get(e);
+    if (r !== void 0 && this._$Em !== r) {
+      const a = s.getPropertyOptions(r), l = typeof a.converter == "function" ? { fromAttribute: a.converter } : ((n = a.converter) == null ? void 0 : n.fromAttribute) !== void 0 ? a.converter : oe;
+      this._$Em = r;
+      const c = l.fromAttribute(t, a.type);
+      this[r] = c ?? ((o = this._$Ej) == null ? void 0 : o.get(r)) ?? c, this._$Em = null;
+    }
+  }
+  requestUpdate(e, t, s, r = !1, n) {
+    var o;
+    if (e !== void 0) {
+      const a = this.constructor;
+      if (r === !1 && (n = this[e]), s ?? (s = a.getPropertyOptions(e)), !((s.hasChanged ?? et)(n, t) || s.useDefault && s.reflect && n === ((o = this._$Ej) == null ? void 0 : o.get(e)) && !this.hasAttribute(a._$Eu(e, s)))) return;
+      this.C(e, t, s);
+    }
+    this.isUpdatePending === !1 && (this._$ES = this._$EP());
+  }
+  C(e, t, { useDefault: s, reflect: r, wrapped: n }, o) {
+    s && !(this._$Ej ?? (this._$Ej = /* @__PURE__ */ new Map())).has(e) && (this._$Ej.set(e, o ?? t ?? this[e]), n !== !0 || o !== void 0) || (this._$AL.has(e) || (this.hasUpdated || s || (t = void 0), this._$AL.set(e, t)), r === !0 && this._$Em !== e && (this._$Eq ?? (this._$Eq = /* @__PURE__ */ new Set())).add(e));
+  }
+  async _$EP() {
+    this.isUpdatePending = !0;
+    try {
+      await this._$ES;
+    } catch (t) {
+      Promise.reject(t);
+    }
+    const e = this.scheduleUpdate();
+    return e != null && await e, !this.isUpdatePending;
+  }
+  scheduleUpdate() {
+    return this.performUpdate();
+  }
+  performUpdate() {
+    var s;
+    if (!this.isUpdatePending) return;
+    if (!this.hasUpdated) {
+      if (this.renderRoot ?? (this.renderRoot = this.createRenderRoot()), this._$Ep) {
+        for (const [n, o] of this._$Ep) this[n] = o;
+        this._$Ep = void 0;
+      }
+      const r = this.constructor.elementProperties;
+      if (r.size > 0) for (const [n, o] of r) {
+        const { wrapped: a } = o, l = this[n];
+        a !== !0 || this._$AL.has(n) || l === void 0 || this.C(n, void 0, o, l);
+      }
+    }
+    let e = !1;
+    const t = this._$AL;
+    try {
+      e = this.shouldUpdate(t), e ? (this.willUpdate(t), (s = this._$EO) == null || s.forEach((r) => {
+        var n;
+        return (n = r.hostUpdate) == null ? void 0 : n.call(r);
+      }), this.update(t)) : this._$EM();
+    } catch (r) {
+      throw e = !1, this._$EM(), r;
+    }
+    e && this._$AE(t);
+  }
+  willUpdate(e) {
+  }
+  _$AE(e) {
+    var t;
+    (t = this._$EO) == null || t.forEach((s) => {
+      var r;
+      return (r = s.hostUpdated) == null ? void 0 : r.call(s);
+    }), this.hasUpdated || (this.hasUpdated = !0, this.firstUpdated(e)), this.updated(e);
+  }
+  _$EM() {
+    this._$AL = /* @__PURE__ */ new Map(), this.isUpdatePending = !1;
+  }
+  get updateComplete() {
+    return this.getUpdateComplete();
+  }
+  getUpdateComplete() {
+    return this._$ES;
+  }
+  shouldUpdate(e) {
+    return !0;
+  }
+  update(e) {
+    this._$Eq && (this._$Eq = this._$Eq.forEach((t) => this._$ET(t, this[t]))), this._$EM();
+  }
+  updated(e) {
+  }
+  firstUpdated(e) {
+  }
+};
+M.elementStyles = [], M.shadowRootOptions = { mode: "open" }, M[O("elementProperties")] = /* @__PURE__ */ new Map(), M[O("finalized")] = /* @__PURE__ */ new Map(), te == null || te({ ReactiveElement: M }), (w.reactiveElementVersions ?? (w.reactiveElementVersions = [])).push("2.1.2");
+/**
+ * @license
+ * Copyright 2017 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+const L = globalThis, Ee = (i) => i, V = L.trustedTypes, Ce = V ? V.createPolicy("lit-html", { createHTML: (i) => i }) : void 0, tt = "$lit$", $ = `lit$${Math.random().toFixed(9).slice(2)}$`, it = "?" + $, Tt = `<${it}>`, E = document, j = () => E.createComment(""), U = (i) => i === null || typeof i != "object" && typeof i != "function", he = Array.isArray, vt = (i) => he(i) || typeof (i == null ? void 0 : i[Symbol.iterator]) == "function", ie = `[ 	
+\f\r]`, I = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, Me = /-->/g, xe = />/g, v = RegExp(`>|${ie}(?:([^\\s"'>=/]+)(${ie}*=${ie}*(?:[^ 	
+\f\r"'\`<>=]|("|')|))|$)`, "g"), Pe = /'/g, ke = /"/g, st = /^(?:script|style|textarea|title)$/i, At = (i) => (e, ...t) => ({ _$litType$: i, strings: e, values: t }), h = At(1), C = Symbol.for("lit-noChange"), p = Symbol.for("lit-nothing"), De = /* @__PURE__ */ new WeakMap(), A = E.createTreeWalker(E, 129);
+function rt(i, e) {
+  if (!he(i) || !i.hasOwnProperty("raw")) throw Error("invalid template strings array");
+  return Ce !== void 0 ? Ce.createHTML(e) : e;
+}
+const St = (i, e) => {
+  const t = i.length - 1, s = [];
+  let r, n = e === 2 ? "<svg>" : e === 3 ? "<math>" : "", o = I;
+  for (let a = 0; a < t; a++) {
+    const l = i[a];
+    let c, u, d = -1, m = 0;
+    for (; m < l.length && (o.lastIndex = m, u = o.exec(l), u !== null); ) m = o.lastIndex, o === I ? u[1] === "!--" ? o = Me : u[1] !== void 0 ? o = xe : u[2] !== void 0 ? (st.test(u[2]) && (r = RegExp("</" + u[2], "g")), o = v) : u[3] !== void 0 && (o = v) : o === v ? u[0] === ">" ? (o = r ?? I, d = -1) : u[1] === void 0 ? d = -2 : (d = o.lastIndex - u[2].length, c = u[1], o = u[3] === void 0 ? v : u[3] === '"' ? ke : Pe) : o === ke || o === Pe ? o = v : o === Me || o === xe ? o = I : (o = v, r = void 0);
+    const f = o === v && i[a + 1].startsWith("/>") ? " " : "";
+    n += o === I ? l + Tt : d >= 0 ? (s.push(c), l.slice(0, d) + tt + l.slice(d) + $ + f) : l + $ + (d === -2 ? a : f);
+  }
+  return [rt(i, n + (i[t] || "<?>") + (e === 2 ? "</svg>" : e === 3 ? "</math>" : "")), s];
+};
+class z {
+  constructor({ strings: e, _$litType$: t }, s) {
+    let r;
+    this.parts = [];
+    let n = 0, o = 0;
+    const a = e.length - 1, l = this.parts, [c, u] = St(e, t);
+    if (this.el = z.createElement(c, s), A.currentNode = this.el.content, t === 2 || t === 3) {
+      const d = this.el.content.firstChild;
+      d.replaceWith(...d.childNodes);
+    }
+    for (; (r = A.nextNode()) !== null && l.length < a; ) {
+      if (r.nodeType === 1) {
+        if (r.hasAttributes()) for (const d of r.getAttributeNames()) if (d.endsWith(tt)) {
+          const m = u[o++], f = r.getAttribute(d).split($), _ = /([.?@])?(.*)/.exec(m);
+          l.push({ type: 1, index: n, name: _[2], strings: f, ctor: _[1] === "." ? Ct : _[1] === "?" ? Mt : _[1] === "@" ? xt : X }), r.removeAttribute(d);
+        } else d.startsWith($) && (l.push({ type: 6, index: n }), r.removeAttribute(d));
+        if (st.test(r.tagName)) {
+          const d = r.textContent.split($), m = d.length - 1;
+          if (m > 0) {
+            r.textContent = V ? V.emptyScript : "";
+            for (let f = 0; f < m; f++) r.append(d[f], j()), A.nextNode(), l.push({ type: 2, index: ++n });
+            r.append(d[m], j());
+          }
         }
-        // Passing date through Date applies Date.parse, if necessary
-        date = date ? new Date(date) : new Date;
-        if (isNaN(date)) throw SyntaxError("invalid date");
-        mask = String(dF.masks[mask] || mask || dF.masks["default"]);
-        // Allow setting the utc argument via the mask
-        if (mask.slice(0, 4) == "UTC:") {
-            mask = mask.slice(4);
-            utc = true;
-        }
-        var _ = utc ? "getUTC" : "get",
-            d = date[_ + "Date"](),
-            D = date[_ + "Day"](),
-            m = date[_ + "Month"](),
-            y = date[_ + "FullYear"](),
-            H = date[_ + "Hours"](),
-            M = date[_ + "Minutes"](),
-            s = date[_ + "Seconds"](),
-            L = date[_ + "Milliseconds"](),
-            o = utc ? 0 : date.getTimezoneOffset(),
-            flags = {
-                d: d,
-                dd: pad(d),
-                ddd: dF.i18n.dayNames[D],
-                dddd: dF.i18n.dayNames[D + 7],
-                m: m + 1,
-                mm: pad(m + 1),
-                mmm: dF.i18n.monthNames[m],
-                mmmm: dF.i18n.monthNames[m + 12],
-                yy: String(y).slice(2),
-                yyyy: y,
-                h: H % 12 || 12,
-                hh: pad(H % 12 || 12),
-                H: H,
-                HH: pad(H),
-                M: M,
-                MM: pad(M),
-                s: s,
-                ss: pad(s),
-                l: pad(L, 3),
-                L: pad(L > 99 ? Math.round(L / 10) : L),
-                t: H < 12 ? "a" : "p",
-                tt: H < 12 ? "am" : "pm",
-                T: H < 12 ? "A" : "P",
-                TT: H < 12 ? "AM" : "PM",
-                Z: utc ? "UTC" : (String(date).match(timezone) || [""]).pop().replace(timezoneClip, ""),
-                o: (o > 0 ? "-" : "+") + pad(Math.floor(Math.abs(o) / 60) * 100 + Math.abs(o) % 60, 4),
-                S: ["th", "st", "nd", "rd"][d % 10 > 3 ? 0 : (d % 100 - d % 10 != 10) * d % 10]
-            };
-        return mask.replace(token, function ($0) {
-            return $0 in flags ? flags[$0] : $0.slice(1, $0.length - 1);
-        });
+      } else if (r.nodeType === 8) if (r.data === it) l.push({ type: 2, index: n });
+      else {
+        let d = -1;
+        for (; (d = r.data.indexOf($, d + 1)) !== -1; ) l.push({ type: 7, index: n }), d += $.length - 1;
+      }
+      n++;
+    }
+  }
+  static createElement(e, t) {
+    const s = E.createElement("template");
+    return s.innerHTML = e, s;
+  }
+}
+function P(i, e, t = i, s) {
+  var o, a;
+  if (e === C) return e;
+  let r = s !== void 0 ? (o = t._$Co) == null ? void 0 : o[s] : t._$Cl;
+  const n = U(e) ? void 0 : e._$litDirective$;
+  return (r == null ? void 0 : r.constructor) !== n && ((a = r == null ? void 0 : r._$AO) == null || a.call(r, !1), n === void 0 ? r = void 0 : (r = new n(i), r._$AT(i, t, s)), s !== void 0 ? (t._$Co ?? (t._$Co = []))[s] = r : t._$Cl = r), r !== void 0 && (e = P(i, r._$AS(i, e.values), r, s)), e;
+}
+class Et {
+  constructor(e, t) {
+    this._$AV = [], this._$AN = void 0, this._$AD = e, this._$AM = t;
+  }
+  get parentNode() {
+    return this._$AM.parentNode;
+  }
+  get _$AU() {
+    return this._$AM._$AU;
+  }
+  u(e) {
+    const { el: { content: t }, parts: s } = this._$AD, r = ((e == null ? void 0 : e.creationScope) ?? E).importNode(t, !0);
+    A.currentNode = r;
+    let n = A.nextNode(), o = 0, a = 0, l = s[0];
+    for (; l !== void 0; ) {
+      if (o === l.index) {
+        let c;
+        l.type === 2 ? c = new R(n, n.nextSibling, this, e) : l.type === 1 ? c = new l.ctor(n, l.name, l.strings, this, e) : l.type === 6 && (c = new Pt(n, this, e)), this._$AV.push(c), l = s[++a];
+      }
+      o !== (l == null ? void 0 : l.index) && (n = A.nextNode(), o++);
+    }
+    return A.currentNode = E, r;
+  }
+  p(e) {
+    let t = 0;
+    for (const s of this._$AV) s !== void 0 && (s.strings !== void 0 ? (s._$AI(e, s, t), t += s.strings.length - 2) : s._$AI(e[t])), t++;
+  }
+}
+class R {
+  get _$AU() {
+    var e;
+    return ((e = this._$AM) == null ? void 0 : e._$AU) ?? this._$Cv;
+  }
+  constructor(e, t, s, r) {
+    this.type = 2, this._$AH = p, this._$AN = void 0, this._$AA = e, this._$AB = t, this._$AM = s, this.options = r, this._$Cv = (r == null ? void 0 : r.isConnected) ?? !0;
+  }
+  get parentNode() {
+    let e = this._$AA.parentNode;
+    const t = this._$AM;
+    return t !== void 0 && (e == null ? void 0 : e.nodeType) === 11 && (e = t.parentNode), e;
+  }
+  get startNode() {
+    return this._$AA;
+  }
+  get endNode() {
+    return this._$AB;
+  }
+  _$AI(e, t = this) {
+    e = P(this, e, t), U(e) ? e === p || e == null || e === "" ? (this._$AH !== p && this._$AR(), this._$AH = p) : e !== this._$AH && e !== C && this._(e) : e._$litType$ !== void 0 ? this.$(e) : e.nodeType !== void 0 ? this.T(e) : vt(e) ? this.k(e) : this._(e);
+  }
+  O(e) {
+    return this._$AA.parentNode.insertBefore(e, this._$AB);
+  }
+  T(e) {
+    this._$AH !== e && (this._$AR(), this._$AH = this.O(e));
+  }
+  _(e) {
+    this._$AH !== p && U(this._$AH) ? this._$AA.nextSibling.data = e : this.T(E.createTextNode(e)), this._$AH = e;
+  }
+  $(e) {
+    var n;
+    const { values: t, _$litType$: s } = e, r = typeof s == "number" ? this._$AC(e) : (s.el === void 0 && (s.el = z.createElement(rt(s.h, s.h[0]), this.options)), s);
+    if (((n = this._$AH) == null ? void 0 : n._$AD) === r) this._$AH.p(t);
+    else {
+      const o = new Et(r, this), a = o.u(this.options);
+      o.p(t), this.T(a), this._$AH = o;
+    }
+  }
+  _$AC(e) {
+    let t = De.get(e.strings);
+    return t === void 0 && De.set(e.strings, t = new z(e)), t;
+  }
+  k(e) {
+    he(this._$AH) || (this._$AH = [], this._$AR());
+    const t = this._$AH;
+    let s, r = 0;
+    for (const n of e) r === t.length ? t.push(s = new R(this.O(j()), this.O(j()), this, this.options)) : s = t[r], s._$AI(n), r++;
+    r < t.length && (this._$AR(s && s._$AB.nextSibling, r), t.length = r);
+  }
+  _$AR(e = this._$AA.nextSibling, t) {
+    var s;
+    for ((s = this._$AP) == null ? void 0 : s.call(this, !1, !0, t); e !== this._$AB; ) {
+      const r = Ee(e).nextSibling;
+      Ee(e).remove(), e = r;
+    }
+  }
+  setConnected(e) {
+    var t;
+    this._$AM === void 0 && (this._$Cv = e, (t = this._$AP) == null || t.call(this, e));
+  }
+}
+class X {
+  get tagName() {
+    return this.element.tagName;
+  }
+  get _$AU() {
+    return this._$AM._$AU;
+  }
+  constructor(e, t, s, r, n) {
+    this.type = 1, this._$AH = p, this._$AN = void 0, this.element = e, this.name = t, this._$AM = r, this.options = n, s.length > 2 || s[0] !== "" || s[1] !== "" ? (this._$AH = Array(s.length - 1).fill(new String()), this.strings = s) : this._$AH = p;
+  }
+  _$AI(e, t = this, s, r) {
+    const n = this.strings;
+    let o = !1;
+    if (n === void 0) e = P(this, e, t, 0), o = !U(e) || e !== this._$AH && e !== C, o && (this._$AH = e);
+    else {
+      const a = e;
+      let l, c;
+      for (e = n[0], l = 0; l < n.length - 1; l++) c = P(this, a[s + l], t, l), c === C && (c = this._$AH[l]), o || (o = !U(c) || c !== this._$AH[l]), c === p ? e = p : e !== p && (e += (c ?? "") + n[l + 1]), this._$AH[l] = c;
+    }
+    o && !r && this.j(e);
+  }
+  j(e) {
+    e === p ? this.element.removeAttribute(this.name) : this.element.setAttribute(this.name, e ?? "");
+  }
+}
+class Ct extends X {
+  constructor() {
+    super(...arguments), this.type = 3;
+  }
+  j(e) {
+    this.element[this.name] = e === p ? void 0 : e;
+  }
+}
+class Mt extends X {
+  constructor() {
+    super(...arguments), this.type = 4;
+  }
+  j(e) {
+    this.element.toggleAttribute(this.name, !!e && e !== p);
+  }
+}
+class xt extends X {
+  constructor(e, t, s, r, n) {
+    super(e, t, s, r, n), this.type = 5;
+  }
+  _$AI(e, t = this) {
+    if ((e = P(this, e, t, 0) ?? p) === C) return;
+    const s = this._$AH, r = e === p && s !== p || e.capture !== s.capture || e.once !== s.once || e.passive !== s.passive, n = e !== p && (s === p || r);
+    r && this.element.removeEventListener(this.name, this, s), n && this.element.addEventListener(this.name, this, e), this._$AH = e;
+  }
+  handleEvent(e) {
+    var t;
+    typeof this._$AH == "function" ? this._$AH.call(((t = this.options) == null ? void 0 : t.host) ?? this.element, e) : this._$AH.handleEvent(e);
+  }
+}
+class Pt {
+  constructor(e, t, s) {
+    this.element = e, this.type = 6, this._$AN = void 0, this._$AM = t, this.options = s;
+  }
+  get _$AU() {
+    return this._$AM._$AU;
+  }
+  _$AI(e) {
+    P(this, e);
+  }
+}
+const se = L.litHtmlPolyfillSupport;
+se == null || se(z, R), (L.litHtmlVersions ?? (L.litHtmlVersions = [])).push("3.3.3");
+const kt = (i, e, t) => {
+  const s = (t == null ? void 0 : t.renderBefore) ?? e;
+  let r = s._$litPart$;
+  if (r === void 0) {
+    const n = (t == null ? void 0 : t.renderBefore) ?? null;
+    s._$litPart$ = r = new R(e.insertBefore(j(), n), n, void 0, t ?? {});
+  }
+  return r._$AI(i), r;
+};
+/**
+ * @license
+ * Copyright 2017 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+const S = globalThis;
+let x = class extends M {
+  constructor() {
+    super(...arguments), this.renderOptions = { host: this }, this._$Do = void 0;
+  }
+  createRenderRoot() {
+    var t;
+    const e = super.createRenderRoot();
+    return (t = this.renderOptions).renderBefore ?? (t.renderBefore = e.firstChild), e;
+  }
+  update(e) {
+    const t = this.render();
+    this.hasUpdated || (this.renderOptions.isConnected = this.isConnected), super.update(e), this._$Do = kt(t, this.renderRoot, this.renderOptions);
+  }
+  connectedCallback() {
+    var e;
+    super.connectedCallback(), (e = this._$Do) == null || e.setConnected(!0);
+  }
+  disconnectedCallback() {
+    var e;
+    super.disconnectedCallback(), (e = this._$Do) == null || e.setConnected(!1);
+  }
+  render() {
+    return C;
+  }
+};
+var Ke;
+x._$litElement$ = !0, x.finalized = !0, (Ke = S.litElementHydrateSupport) == null || Ke.call(S, { LitElement: x });
+const re = S.litElementPolyfillSupport;
+re == null || re({ LitElement: x });
+(S.litElementVersions ?? (S.litElementVersions = [])).push("4.2.2");
+/**
+ * @license
+ * Copyright 2017 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+const Dt = { CHILD: 2 }, It = (i) => (...e) => ({ _$litDirective$: i, values: e });
+class Nt {
+  constructor(e) {
+  }
+  get _$AU() {
+    return this._$AM._$AU;
+  }
+  _$AT(e, t, s) {
+    this._$Ct = e, this._$AM = t, this._$Ci = s;
+  }
+  _$AS(e, t) {
+    return this.update(e, t);
+  }
+  update(e, t) {
+    return this.render(...t);
+  }
+}
+/**
+ * @license
+ * Copyright 2017 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+class ae extends Nt {
+  constructor(e) {
+    if (super(e), this.it = p, e.type !== Dt.CHILD) throw Error(this.constructor.directiveName + "() can only be used in child bindings");
+  }
+  render(e) {
+    if (e === p || e == null) return this._t = void 0, this.it = e;
+    if (e === C) return e;
+    if (typeof e != "string") throw Error(this.constructor.directiveName + "() called with a non-string value");
+    if (e === this.it) return this._t;
+    this.it = e;
+    const t = [e];
+    return t.raw = t, this._t = { _$litType$: this.constructor.resultType, strings: t, values: [] };
+  }
+}
+ae.directiveName = "unsafeHTML", ae.resultType = 1;
+const Ie = It(ae);
+function Ne(i) {
+  const e = i == null ? void 0 : i.attributes, t = nt(e), s = [
+    e == null ? void 0 : e.tasks,
+    e == null ? void 0 : e.items,
+    e == null ? void 0 : e.results,
+    e == null ? void 0 : e.result,
+    e == null ? void 0 : e.data,
+    t == null ? void 0 : t.tasks,
+    t == null ? void 0 : t.items
+  ];
+  return ot(s);
+}
+function me(i) {
+  const e = i == null ? void 0 : i.attributes, t = nt(e), s = [
+    e == null ? void 0 : e.sections,
+    t == null ? void 0 : t.sections,
+    e == null ? void 0 : e.project_sections,
+    t == null ? void 0 : t.project_sections
+  ];
+  return ot(s);
+}
+function Ot(i, e) {
+  var n, o;
+  const t = e.comments_entity ? (n = i == null ? void 0 : i.states) == null ? void 0 : n[e.comments_entity] : void 0, s = (o = i == null ? void 0 : i.states) == null ? void 0 : o[e.entity], r = t ? t.attributes.results ?? t.attributes.comments ?? t.attributes.items : s == null ? void 0 : s.attributes.project_notes;
+  return Ut(r);
+}
+function Lt(i) {
+  var s;
+  const e = (s = i == null ? void 0 : i.states) == null ? void 0 : s["sensor.label_colors"];
+  if (!e) throw new Error("PowerTodoistCard: sensor.label_colors not found");
+  const t = e.attributes.label_colors;
+  return Array.isArray(t) ? t : [];
+}
+function nt(i) {
+  return [
+    i == null ? void 0 : i.results,
+    i == null ? void 0 : i.result,
+    i == null ? void 0 : i.data
+  ].find(
+    (t) => !!t && typeof t == "object" && !Array.isArray(t)
+  );
+}
+function ot(i) {
+  const e = i.map(jt).filter(Array.isArray);
+  return e.find((t) => t.length > 0) ?? e[0] ?? [];
+}
+function jt(i) {
+  if (Array.isArray(i)) return i;
+  if (!i || typeof i != "object") return;
+  const e = i;
+  return [
+    e.tasks,
+    e.items,
+    e.results,
+    e.result,
+    e.data,
+    e.sections,
+    e.project_sections
+  ].find(Array.isArray);
+}
+function Ut(i) {
+  if (Array.isArray(i))
+    return i.map(Oe).filter((t) => !!t);
+  const e = Oe(i);
+  return e ? [e] : [];
+}
+function Oe(i) {
+  if (typeof i == "string") return { content: i };
+  if (!i || typeof i != "object") return;
+  const e = i;
+  if (typeof e.content == "string")
+    return {
+      id: typeof e.id == "string" ? e.id : void 0,
+      content: e.content
     };
-}();
-// Some common format strings
-dateFormat.masks = {
-    "default": "ddd mmm dd yyyy HH:MM:ss",
-    shortDate: "m/d/yy",
-    mediumDate: "mmm d, yyyy",
-    longDate: "mmmm d, yyyy",
-    fullDate: "dddd, mmmm d, yyyy",
-    shortTime: "h:MM TT",
-    mediumTime: "h:MM:ss TT",
-    longTime: "h:MM:ss TT Z",
-    isoDate: "yyyy-mm-dd",
-    isoTime: "HH:MM:ss",
-    isoDateTime: "yyyy-mm-dd'T'HH:MM:ss",
-    isoUtcDateTime: "UTC:yyyy-mm-dd'T'HH:MM:ss'Z'"
+}
+function Z(i, e, t = "", s = "") {
+  if (typeof i != "string") return i;
+  const r = {
+    ...Object.fromEntries(
+      Object.entries(e).map(([o, a]) => [o.toLowerCase(), a])
+    ),
+    "%was%": t,
+    "%input%": s,
+    "%line%": `
+`
+  }, n = new RegExp(Object.keys(r).join("|"), "gi");
+  return i.replace(n, (o) => r[o.toLowerCase()] ?? o);
+}
+function zt() {
+  const i = /* @__PURE__ */ new Date();
+  return `${Math.floor(Math.random() * 99 + 1)}-${Number(i)}-${i.getMilliseconds()}`;
+}
+function Ht(i, e) {
+  const t = Rt(i, e);
+  Object.keys(t).forEach((r) => {
+    const n = t[r];
+    /%[a-zA-Z0-9_-]+%/.test(n) && (t[r] = Z(n, t));
+  });
+  const s = Z(JSON.stringify(i), Ft(t));
+  if (typeof s != "string") return i;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return i;
+  }
+}
+function Rt(i, e) {
+  var n, o, a, l;
+  const t = {
+    "%user%": ((n = e == null ? void 0 : e.user) == null ? void 0 : n.name) ?? "",
+    "%section%": i.filter_section ?? "",
+    "%date%": (/* @__PURE__ */ new Date()).toISOString(),
+    "%project_notes%": ""
+  };
+  Ot(e, i).forEach((c, u) => {
+    t[`%project_notes_${u}%`] = c.content, u === 0 && (t["%project_notes%"] = c.content);
+  });
+  const s = i.relative_day_entity ?? "sensor.dow";
+  return (((l = (a = (o = e == null ? void 0 : e.states) == null ? void 0 : o[s]) == null ? void 0 : a.state) == null ? void 0 : l.split(", ")) ?? []).forEach((c, u) => {
+    t[`%dow${u - 1}%`] = (c == null ? void 0 : c.replaceAll("'", "")) ?? "";
+  }), t;
+}
+function Ft(i) {
+  return Object.fromEntries(
+    Object.entries(i).map(([e, t]) => [e, JSON.stringify(t).slice(1, -1)])
+  );
+}
+function Bt(i, e) {
+  return Jt(Wt([...i], e), e);
+}
+function Wt(i, e) {
+  if (e.sort_by_due_date !== void 0 && e.sort_by_due_date !== !1 && i.sort((r, n) => r.due && n.due ? e.sort_by_due_date === "ascending" ? new Date(r.due.date).getTime() - new Date(n.due.date).getTime() : new Date(n.due.date).getTime() - new Date(r.due.date).getTime() : 0), e.filter_show_dates_starting === void 0 && e.filter_show_dates_ending === void 0)
+    return i;
+  let t = Number(e.filter_show_dates_starting), s = Number(e.filter_show_dates_ending);
+  return typeof e.filter_show_dates_starting == "string" && !Number.isNaN(t) ? t = (/* @__PURE__ */ new Date()).setHours(0, 0, 0, 0) + t * 24 * 60 * 60 * 1e3 : t = Date.now() + t * 60 * 60 * 1e3, typeof e.filter_show_dates_ending == "string" && !Number.isNaN(s) ? s = (/* @__PURE__ */ new Date()).setHours(23, 59, 59, 999) + s * 24 * 60 * 60 * 1e3 : s = Date.now() + s * 60 * 60 * 1e3, i.filter((r) => {
+    if (!r.due) return e.filter_show_dates_empty !== !1;
+    const n = qt(r), [o, a] = Vt(r.due.date);
+    Number.isNaN(s) && n && (t -= n, s = Date.now());
+    const l = Number.isNaN(t) || t <= a, c = Number.isNaN(s) || s >= o;
+    return l && c;
+  });
+}
+function Jt(i, e) {
+  return e.sort_by_priority !== void 0 && e.sort_by_priority !== !1 && i.sort((t, s) => t.priority && s.priority ? e.sort_by_priority === "ascending" ? t.priority - s.priority : s.priority - t.priority : 0), i;
+}
+function qt(i) {
+  return i.duration ? i.duration.unit === "day" ? i.duration.amount * 24 * 60 * 60 * 1e3 : i.duration.amount * 60 * 1e3 : 0;
+}
+function Vt(i) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(i))
+    return [
+      (/* @__PURE__ */ new Date(`${i}T00:00:00`)).getTime(),
+      (/* @__PURE__ */ new Date(`${i}T23:59:59`)).getTime()
+    ];
+  const e = new Date(i).getTime();
+  return [e, e];
+}
+const Zt = {
+  [-1]: "Ontem",
+  0: "Hoje",
+  1: "Amanhã",
+  2: "Depois de amanhã"
 };
-// Internationalization strings
-dateFormat.i18n = {
-    dayNames: [
-        "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat",
-        "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
-    ],
-    monthNames: [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-        "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
-    ]
+function Qt(i, e, t = {}) {
+  const s = Gt(t.sourceToken) ?? Yt(i, e, t.entityId);
+  if (s === void 0) return i;
+  const r = Zt[s] ?? `Daqui a ${s} dias`;
+  return `${i} (${r})`;
+}
+function Yt(i, e, t = "sensor.dow") {
+  const s = Kt(e, t), r = Le(i), n = s.findIndex((o) => Le(o) === r);
+  if (!(n < 0))
+    return n - 1;
+}
+function Gt(i) {
+  if (typeof i != "string") return;
+  const e = i.match(/%dow(-?\d+)%/i);
+  if (e)
+    return Number(e[1]);
+}
+function Kt(i, e) {
+  var t, s, r;
+  return ((r = (s = (t = i == null ? void 0 : i.states) == null ? void 0 : t[e]) == null ? void 0 : s.state) == null ? void 0 : r.split(", ").map((n) => n.replaceAll("'", "").trim()).filter(Boolean)) ?? [];
+}
+function Le(i) {
+  return i.trim().toLocaleLowerCase("pt-PT");
+}
+const at = "🗓", je = {
+  default: "ddd mmm dd yyyy HH:MM:ss",
+  shortDate: "m/d/yy",
+  mediumDate: "mmm d, yyyy",
+  longDate: "mmmm d, yyyy",
+  fullDate: "dddd, mmmm d, yyyy",
+  shortTime: "h:MM TT",
+  mediumTime: "h:MM:ss TT",
+  longTime: "h:MM:ss TT Z",
+  isoDate: "yyyy-mm-dd",
+  isoTime: "HH:MM:ss",
+  isoDateTime: "yyyy-mm-dd'T'HH:MM:ss",
+  isoUtcDateTime: "UTC:yyyy-mm-dd'T'HH:MM:ss'Z'"
+}, Ue = [
+  "Sun",
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday"
+], ze = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December"
+], Xt = /d{1,4}|m{1,4}|yy(?:yy)?|([HhMsTt])\1?|[LloSZ]|"[^"]*"|'[^']*'/g;
+function ei(i, e) {
+  if (!(!e.show_dates || !i.due))
+    return ii(i.due.datetime ?? i.due.date, e.date_format);
+}
+function ti(i) {
+  return i.startsWith(at);
+}
+function ii(i, e) {
+  return `${at}${lt(i, e || "dd-mmm H'h'MM")}`;
+}
+function lt(i, e, t = !1) {
+  let s = je[e] || e || je.default;
+  s.startsWith("UTC:") && (s = s.slice(4), t = !0);
+  const r = si(i);
+  if (Number.isNaN(r.getTime())) throw new SyntaxError("invalid date");
+  const n = t ? "getUTC" : "get", o = r[`${n}Date`](), a = r[`${n}Day`](), l = r[`${n}Month`](), c = r[`${n}FullYear`](), u = r[`${n}Hours`](), d = r[`${n}Minutes`](), m = r[`${n}Seconds`](), f = r[`${n}Milliseconds`](), _ = t ? 0 : r.getTimezoneOffset(), D = {
+    d: o,
+    dd: b(o),
+    ddd: Ue[a],
+    dddd: Ue[a + 7],
+    m: l + 1,
+    mm: b(l + 1),
+    mmm: ze[l],
+    mmmm: ze[l + 12],
+    yy: String(c).slice(2),
+    yyyy: c,
+    h: u % 12 || 12,
+    hh: b(u % 12 || 12),
+    H: u,
+    HH: b(u),
+    M: d,
+    MM: b(d),
+    s: m,
+    ss: b(m),
+    l: b(f, 3),
+    L: b(f > 99 ? Math.round(f / 10) : f),
+    t: u < 12 ? "a" : "p",
+    tt: u < 12 ? "am" : "pm",
+    T: u < 12 ? "A" : "P",
+    TT: u < 12 ? "AM" : "PM",
+    Z: t ? "UTC" : ri(r),
+    o: `${_ > 0 ? "-" : "+"}${b(Math.floor(Math.abs(_) / 60) * 100 + Math.abs(_) % 60, 4)}`,
+    S: ["th", "st", "nd", "rd"][o % 10 > 3 ? 0 : +(o % 100 - o % 10 !== 10) * (o % 10)]
+  };
+  return s.replace(
+    Xt,
+    (T) => T in D ? String(D[T]) : T.slice(1, T.length - 1)
+  );
+}
+function si(i) {
+  return i instanceof Date ? i : /^\d{4}-\d{2}-\d{2}$/.test(i) ? /* @__PURE__ */ new Date(`${i}T00:00:00`) : new Date(i);
+}
+function b(i, e = 2) {
+  let t = String(i);
+  for (; t.length < e; ) t = `0${t}`;
+  return t;
+}
+function ri(i) {
+  var e;
+  return ((e = (String(i).match(/\b(?:GMT|UTC)(?:[-+]\d{4})?\b/g) || [""]).pop()) == null ? void 0 : e.replace(/[^-+\dA-Z]/g, "")) ?? "";
+}
+function ni(i, e) {
+  if (!i) return "";
+  const t = oi(i, e);
+  return ci(t);
+}
+function oi(i, e) {
+  return i.replace(/\{\{(.+?)\}\}/g, (t, s) => {
+    try {
+      return ai(s.trim(), e);
+    } catch {
+      return `[${s.trim()}]`;
+    }
+  });
+}
+function ai(i, e, t = /* @__PURE__ */ new Date()) {
+  var o, a, l, c, u, d;
+  const s = i.match(/now\(\)\.strftime\(['"](.+?)['"]\)/);
+  if (s) return lt(t, li(s[1]));
+  if (i === "user") return ((o = e == null ? void 0 : e.user) == null ? void 0 : o.name) || "unknown";
+  const r = i.match(/states\(['"](.+?)['"]\)/);
+  if (r) return ((l = (a = e == null ? void 0 : e.states) == null ? void 0 : a[r[1]]) == null ? void 0 : l.state) || "unavailable";
+  const n = i.match(/state_attr\(['"](.+?)['"],\s*['"](.+?)['"]\)/);
+  if (n) {
+    const m = (d = (u = (c = e == null ? void 0 : e.states) == null ? void 0 : c[n[1]]) == null ? void 0 : u.attributes) == null ? void 0 : d[n[2]];
+    return m == null ? "" : String(m);
+  }
+  throw new Error(`Unsupported expression: ${i}`);
+}
+function li(i) {
+  return i.replace(/%d/g, "dd").replace(/%m/g, "mm").replace(/%Y/g, "yyyy").replace(/%H/g, "HH").replace(/%M/g, "MM").replace(/%S/g, "ss").replace(/%B/g, "mmmm").replace(/%b/g, "mmm").replace(/%A/g, "dddd").replace(/%a/g, "ddd").replace(/%I/g, "hh").replace(/%p/g, "TT");
+}
+function ci(i) {
+  return i.replace(/\r\n/g, `
+`).split(/\n{2,}/).map(di).filter(Boolean).join(`
+`);
+}
+function di(i) {
+  const e = i.split(`
+`), t = i.trim();
+  if (!t) return "";
+  const s = t.match(/^(#{1,6})\s+(.+)$/);
+  if (s) {
+    const r = s[1].length;
+    return `<h${r}>${F(s[2].trim())}</h${r}>`;
+  }
+  return e.every((r) => /^\s*[-*]\s+/.test(r)) ? `<ul>${e.map((n) => n.replace(/^\s*[-*]\s+/, "")).map((n) => `<li>${F(n)}</li>`).join("")}</ul>` : e.every((r) => /^\s*\d+\.\s+/.test(r)) ? `<ol>${e.map((n) => n.replace(/^\s*\d+\.\s+/, "")).map((n) => `<li>${F(n)}</li>`).join("")}</ol>` : `<p>${e.map((r) => F(r)).join("<br>")}</p>`;
+}
+function F(i) {
+  let e = ui(i);
+  return e = e.replace(/`([^`]+)`/g, "<code>$1</code>"), e = e.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>"), e = e.replace(/\*([^*]+)\*/g, "<em>$1</em>"), e = e.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+    '<a href="$2" target="_blank" rel="noreferrer">$1</a>'
+  ), e;
+}
+function ui(i) {
+  return i.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function pi(i, e, t, s) {
+  if (!e) return t;
+  const r = i.labels ?? [];
+  let n = 0, o = 0;
+  return e.forEach((a) => {
+    if (a.startsWith("!")) {
+      o += r.includes(a.slice(1)) ? 1 : 0;
+      return;
+    }
+    n += r.includes(a) || a === "*" ? 1 : 0, n += a === "!*" && r.length === 0 ? 1 : 0;
+  }), o === 0 && n > 0;
+}
+function hi(i, e) {
+  return i.map((t) => ({
+    ...t,
+    statusFromLabelCriteria: pi(t, e.status_from_labels, !1)
+  }));
+}
+function mi(i, e, t, s) {
+  const r = i.labels ?? [], n = ei(i, e), o = fi(r, e, s);
+  if (e.show_item_labels === !1) return [n, ...o].filter(He);
+  const a = [n, ...r, ...o].filter(He), l = /* @__PURE__ */ new Set([
+    ...t.length === 1 ? t : [],
+    ...a.filter((c) => c.startsWith("_") && !c.endsWith("_outline"))
+  ]);
+  return a.filter((c) => !l.has(c));
+}
+function He(i) {
+  return typeof i == "string" && i.length > 0;
+}
+function fi(i, e, t) {
+  var r;
+  const s = [];
+  return (r = e.extra_labels) == null || r.forEach((n) => {
+    const o = n.split(/[:+]/).map((d) => d.trim()).filter(Boolean), a = o[0];
+    if (!a) return;
+    const l = n.split(":").map((d) => d.trim());
+    let c = o.slice(1).filter((d) => i.includes(d));
+    if (l.length > 1 && l[1].startsWith("+") && (c = c.length > 0 ? [String(c.length)] : []), !c.length && n.includes(":")) return;
+    const u = t.some((d) => d.name === `${a}_outline`);
+    s.push(`${a}: ${c.join("+")}${u ? "_outline" : ""}`);
+  }), s;
+}
+function gi(i, e) {
+  var r;
+  if (i.filter_section_id) return i.filter_section_id;
+  const t = i.filter_section;
+  if (!t || t === "!*") return;
+  const s = Y(t);
+  return (r = me(e).find((n) => Y(n.name) === s)) == null ? void 0 : r.id;
+}
+function _i(i, e, t) {
+  return e.filter_section === "!*" ? i.filter((s) => !Re(s) && !Fe(s)) : t ? i.filter(
+    (s) => Q(Re(s)) === Q(t) || Y(Fe(s) ?? "") === Y(e.filter_section ?? "")
+  ) : i;
+}
+function bi(i, e) {
+  const t = [];
+  return i.filter_labels && e.forEach((s) => {
+    var n;
+    const r = s.labels ?? [];
+    (n = i.filter_labels) == null || n.forEach((o) => {
+      !o.startsWith("!") && (r.includes(o) || o === "*") && (t.includes(o) || t.push(o));
+    });
+  }), t;
+}
+function yi(i, e, t) {
+  var s;
+  return i.name || i.friendly_name || ((s = me(e).find((r) => Q(r.id) === Q(t))) == null ? void 0 : s.name) || i.filter_section || "ToDoist";
+}
+function Q(i) {
+  return i == null ? "" : String(i);
+}
+function Re(i) {
+  const e = i;
+  if (e.section_id !== void 0 && e.section_id !== null) return e.section_id;
+  if (e.sectionId !== void 0 && e.sectionId !== null) return e.sectionId;
+  if (e.section && typeof e.section == "object") return e.section.id;
+}
+function Fe(i) {
+  const e = i;
+  if (typeof e.section_name == "string") return e.section_name;
+  if (typeof e.sectionName == "string") return e.sectionName;
+  if (typeof e.section == "string") return e.section;
+  if (e.section && typeof e.section == "object" && typeof e.section.name == "string")
+    return e.section.name;
+}
+function Y(i) {
+  return i.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-PT");
+}
+function $i(i) {
+  return i.accent ? "left-accent" : "";
+}
+function wi(i) {
+  const e = N(i.line_size, 40), t = N(i.font_size, 16), s = N(i.icon_size, 24), r = Math.max(e, s + 16), n = N(i.line_padding_top, 0), o = N(i.line_padding_bottom, 0);
+  return [
+    `--pt-item-line-size: ${r}px`,
+    `--pt-item-font-size: ${t}px`,
+    `--pt-icon-size: ${s}px`,
+    `--pt-line-padding-top: ${n}px`,
+    `--pt-line-padding-bottom: ${o}px`,
+    `--pt-accent-color: ${i.accent || "var(--primary-color, #149514)"}`
+  ].join("; ");
+}
+function N(i, e) {
+  return typeof i == "number" && Number.isFinite(i) ? i : typeof i == "string" && i.trim() && Number.isFinite(Number(i)) ? Number(i) : e;
+}
+const le = {
+  berry_red: "rgb(184, 37, 111)",
+  red: "rgb(219, 64, 53)",
+  orange: "rgb(255, 153, 51)",
+  yellow: "rgb(250, 208, 0)",
+  olive_green: "rgb(175, 184, 59)",
+  lime_green: "rgb(126, 204, 73)",
+  green: "rgb(41, 148, 56)",
+  mint_green: "rgb(106, 204, 188)",
+  teal: "rgb(21, 143, 173)",
+  sky_blue: "rgb(20, 170, 245)",
+  light_blue: "rgb(150, 195, 235)",
+  blue: "rgb(64, 115, 255)",
+  grape: "rgb(136, 77, 255)",
+  violet: "rgb(175, 56, 235)",
+  lavender: "rgb(235, 150, 235)",
+  magenta: "rgb(224, 81, 148)",
+  salmon: "rgb(255, 141, 133)",
+  charcoal: "rgb(128, 128, 128)",
+  grey: "rgb(184, 184, 184)",
+  taupe: "rgb(204, 172, 147)",
+  black: "rgb(0, 0, 0)",
+  white: "rgb(255, 255, 255)"
 };
-// For convenience...
-Date.prototype.format = function (mask, utc) {
-    return dateFormat(this, mask, utc);
-};
+function q(i, e = "grey") {
+  return i && fe(i) ? le[i] : le[e];
+}
+function fe(i) {
+  return typeof i == "string" && Object.prototype.hasOwnProperty.call(le, i);
+}
+const H = [
+  "checkbox-marked-circle-outline:green",
+  "circle-medium",
+  "plus-outline:blue",
+  "trash-can-outline:red",
+  "checkbox-marked-circle-outline",
+  "checkbox-blank-circle-outline"
+];
+function Ti(i, e) {
+  return ct(i)[e] ?? G(H[e] ?? H[0]);
+}
+function vi(i, e) {
+  const t = ct(e);
+  return e.status_from_labels !== void 0 && i.statusFromLabelCriteria !== void 0 && t.length >= 6 ? i.statusFromLabelCriteria ? t[4] : t[5] : t[0];
+}
+function ct(i) {
+  return (Array.isArray(i.icons) && i.icons.length >= 4 ? i.icons : H).map((t) => G(t));
+}
+function G(i) {
+  if (typeof i != "string") return G(H[0]);
+  const [e, ...t] = i.split(":"), s = e.trim() || G(H[0]).name, r = t.join(":").trim();
+  return {
+    name: s,
+    color: Ai(r)
+  };
+}
+function Ai(i) {
+  if (i)
+    return fe(i) ? q(i) : i;
+}
+function Si(i) {
+  const e = new Map(i.map((s) => [String(s.id), s])), t = /* @__PURE__ */ new Map();
+  return i.forEach((s) => {
+    t.set(String(s.id), dt(s, e, t, /* @__PURE__ */ new Set()));
+  }), t;
+}
+function Ei(i, e) {
+  return e.get(String(i.id)) ?? (ge(i) ? 1 : 0);
+}
+function ge(i) {
+  const e = i, t = e.parent_id ?? e.parentId ?? (typeof e.parent == "object" ? e.parent.id : e.parent);
+  return t == null || t === "" ? void 0 : String(t);
+}
+function dt(i, e, t, s) {
+  const r = String(i.id), n = ge(i);
+  if (!n) return 0;
+  if (t.has(r)) return t.get(r) ?? 0;
+  if (s.has(r)) return 1;
+  s.add(r);
+  const o = e.get(n), a = o ? Math.min(dt(o, e, t, s) + 1, 6) : 1;
+  return t.set(r, a), a;
+}
+const g = {
+  ITEM_ADD: "item_add",
+  ITEM_UPDATE: "item_update",
+  ITEM_DELETE: "item_delete",
+  ITEM_COMPLETE: "item_close",
+  ITEM_UNCOMPLETE: "item_uncomplete",
+  ITEM_MOVE: "item_move"
+}, Ci = /* @__PURE__ */ new Set([
+  "content",
+  "description",
+  "due",
+  "priority",
+  "collapsed",
+  "assigned_by_uid",
+  "responsible_uid",
+  "day_order"
+]);
+function Mi(i, e, t, s = "actions_close", r = {}) {
+  var we;
+  const n = Pi(e[s]), o = B(n, "label"), a = ki(n), l = B(n, "allow"), c = B(n, "add").map((ee) => _e(ee, i, t, "")), u = Di(n), d = W(n, "toast"), m = W(n, "confirm"), f = W(n, "service"), _ = W(n, "prompt_texts"), D = B(n, "emphasis"), T = ((we = t == null ? void 0 : t.user) == null ? void 0 : we.name) ?? "";
+  if (l.length && !l.includes(T))
+    return { commands: [], adds: [], followUpActions: [], toast: d, confirm: m };
+  const ye = ji(i, s, n, a, _, r.prompt), y = Ii(n, s, i), $e = Ni(s, i, ye);
+  if (!n.length && $e && y.push($e), a.length || o.length) {
+    const ee = xi(i.labels ?? [], o, T), ut = {
+      id: i.id,
+      labels: ee,
+      ...Oi(a, i, t, ye)
+    };
+    return y.unshift(k(g.ITEM_UPDATE, ut)), We(y, n, i, e, t), {
+      commands: y,
+      adds: c,
+      followUpActions: qe(u, i, t),
+      optimisticTask: Ve(i, y),
+      toast: d,
+      confirm: m,
+      service: f,
+      emphasis: D
+    };
+  }
+  return We(y, n, i, e, t), {
+    commands: y,
+    adds: c,
+    followUpActions: qe(u, i, t),
+    optimisticTask: Ve(i, y),
+    toast: d,
+    confirm: m,
+    service: f,
+    emphasis: D
+  };
+}
+function xi(i, e, t) {
+  let s = [...i];
+  return e.includes("!*") && (s = []), e.includes("!_") && (s = s.filter((r) => !r.startsWith("_"))), e.includes("!!") && (s = s.filter((r) => r.startsWith("_"))), e.forEach((r) => {
+    if (["!*", "!_", "!!"].includes(r)) return;
+    const n = Z(r, { "%user%": t });
+    if (r.startsWith("!")) {
+      s = s.filter((o) => o !== n.slice(1));
+      return;
+    }
+    if (r.startsWith(":")) {
+      const o = n.slice(1);
+      s = s.includes(o) ? s.filter((a) => a !== o) : [...s, o];
+      return;
+    }
+    s.includes(n) || (s = [...s, n]);
+  }), [...new Set(s)];
+}
+function Pi(i) {
+  return i ? Array.isArray(i) ? i : [i] : [];
+}
+function B(i, e) {
+  const t = i.find((r) => typeof r == "object" && r[e] !== void 0);
+  if (typeof t != "object") return [];
+  const s = t[e];
+  return Array.isArray(s) ? s.map(String) : typeof s == "string" ? [s] : [];
+}
+function W(i, e) {
+  const t = i.find((r) => typeof r == "object" && r[e] !== void 0);
+  if (typeof t != "object") return;
+  const s = t[e];
+  return Array.isArray(s) ? s.join(" ") : s;
+}
+function ki(i) {
+  const e = i.find((t) => typeof t == "object" && Array.isArray(t.update));
+  return typeof e == "object" && Array.isArray(e.update) ? e.update : [];
+}
+function Di(i) {
+  const e = i.find((t) => typeof t == "object" && Array.isArray(t.match));
+  return typeof e == "object" && Array.isArray(e.match) ? e.match : [];
+}
+function Ii(i, e, t) {
+  const s = [], r = Be(e);
+  return !i.length && r && s.push(k(r, { id: t.id })), i.forEach((n) => {
+    if (typeof n != "string") return;
+    const o = Be(`actions_${n}`);
+    o && s.push(k(o, { id: t.id }));
+  }), s;
+}
+function Be(i) {
+  if (i === "actions_close") return g.ITEM_COMPLETE;
+  if (i === "actions_delete") return g.ITEM_DELETE;
+  if (i === "actions_uncomplete") return g.ITEM_UNCOMPLETE;
+}
+function Ni(i, e, t) {
+  if (i === "actions_content")
+    return k(g.ITEM_UPDATE, { id: e.id, content: t });
+  if (i === "actions_description")
+    return k(g.ITEM_UPDATE, { id: e.id, description: t });
+}
+function Oi(i, e, t, s) {
+  return i.reduce((r, n) => (Object.entries(n).forEach(([o, a]) => {
+    Ci.has(o) && (r[o] = Li(a, e, t, s, e[o]));
+  }), r), {});
+}
+function Li(i, e, t, s, r = "") {
+  return typeof i != "string" ? i : _e(i, e, t, s, r);
+}
+function _e(i, e, t, s, r = "") {
+  var o;
+  const n = Object.entries(e).reduce((a, [l, c]) => ((typeof c == "string" || typeof c == "number" || typeof c == "boolean") && (a[`%${l}%`] = String(c)), a), {
+    "%user%": ((o = t == null ? void 0 : t.user) == null ? void 0 : o.name) ?? "",
+    "%input%": s,
+    "%line%": `
+`,
+    "%str_labels%": JSON.stringify(e.labels ?? []),
+    "%date%": (/* @__PURE__ */ new Date()).toISOString()
+  });
+  return Z(i, n, String(r ?? ""), s);
+}
+function ji(i, e, t, s, r, n) {
+  if (!(!!r || JSON.stringify(s).includes("%input%") || !t.length && ["actions_content", "actions_description"].includes(e)) || !n) return "";
+  const a = e.replace(/^actions_/, "");
+  let l = `Please enter a new value for ${a}:`, c = String(i[a] ?? "");
+  if (r) {
+    const [u, d = ""] = r.split("|");
+    l = u, c = d;
+  }
+  return c = _e(c, i, void 0, ""), n(l, c) ?? "";
+}
+function We(i, e, t, s, r) {
+  if (!e.includes("move")) return;
+  const n = zi(t, Ui(s, r));
+  n && i.push(k(g.ITEM_MOVE, n));
+}
+function Ui(i, e) {
+  var t;
+  return me((t = e == null ? void 0 : e.states) == null ? void 0 : t[i.entity]);
+}
+function zi(i, e) {
+  const t = Hi(i, e);
+  if (t)
+    return {
+      id: i.id,
+      [t === i.project_id ? "project_id" : "section_id"]: t
+    };
+}
+function Hi(i, e) {
+  const t = [...e].sort((n, o) => Je(n) - Je(o));
+  if (!t.length) return i.project_id;
+  const s = t.findIndex((n) => String(n.id) === String(i.section_id ?? "")), r = s < 0 ? t[0] : t[s + 1];
+  return (r == null ? void 0 : r.id) ?? i.project_id;
+}
+function Je(i) {
+  return (i.section_order ?? i.order ?? Number(i.id)) || 0;
+}
+function qe(i, e, t) {
+  return i.flatMap((s) => {
+    if (!Array.isArray(s)) return [];
+    const [r, n, o, a] = s;
+    if (typeof r != "string") return [];
+    const c = (r.includes(".") ? Ri(r, t) === n : Fi(e[r], n)) ? o : a;
+    return typeof c == "string" && c.length ? [Bi(c)] : [];
+  });
+}
+function Ri(i, e) {
+  var n, o;
+  const [t, s] = i.split("#"), r = (n = e == null ? void 0 : e.states) == null ? void 0 : n[t];
+  return s ? (o = r == null ? void 0 : r.attributes) == null ? void 0 : o[s] : r == null ? void 0 : r.state;
+}
+function Fi(i, e) {
+  return Array.isArray(i) ? i.includes(e) : i === e;
+}
+function Bi(i) {
+  return i.startsWith("actions_") ? i.slice(8) : i;
+}
+function k(i, e) {
+  return {
+    type: i,
+    uuid: zt(),
+    args: e
+  };
+}
+function Ve(i, e) {
+  return e.reduce((t, s) => {
+    const r = t ?? i;
+    if (s.type === g.ITEM_UPDATE)
+      return {
+        ...r,
+        ...s.args,
+        id: i.id
+      };
+    if (s.type === g.ITEM_MOVE) {
+      const n = { ...r };
+      return typeof s.args.section_id == "string" && (n.section_id = s.args.section_id), typeof s.args.project_id == "string" && (n.project_id = s.args.project_id, n.section_id = null), n;
+    }
+    return t;
+  }, void 0);
+}
+async function Ze(i, e, t) {
+  !i || !e.length || (await i.callService("rest_command", "todoist", {
+    url: "sync",
+    payload: `commands=${JSON.stringify(e)}`
+  }), t && await i.callService("homeassistant", "update_entity", {
+    entity_id: t
+  }));
+}
+async function Wi(i, e) {
+  !i || !e.length || await Promise.all(e.map(
+    (t) => i.callService("rest_command", "todoist", {
+      url: "quick/add",
+      payload: `text=${t}`
+    })
+  ));
+}
+async function Ji(i, e, t) {
+  !i || !e || (await i.callService("rest_command", "todoist", {
+    url: "tasks/quick",
+    payload: `text=${e}`
+  }), t && await i.callService("homeassistant", "update_entity", {
+    entity_id: t
+  }));
+}
+async function qi(i, e, t) {
+  if (!i || !e) return;
+  const s = e.includes("script.");
+  await i.callService(
+    s ? "homeassistant" : "automation",
+    s ? "turn_on" : "trigger",
+    { entity_id: e }
+  ), t && await i.callService("homeassistant", "update_entity", {
+    entity_id: t
+  });
+}
+const K = class K extends x {
+  constructor() {
+    super(...arguments), this.itemsJustCompleted = [], this.pendingTaskIds = /* @__PURE__ */ new Set(), this.emphasizedTaskIds = /* @__PURE__ */ new Set(), this.clickCount = 0, this.longPressMs = 1500, this.clickDelayMs = 500;
+  }
+  setConfig(e) {
+    if (!(e != null && e.entity)) throw new Error("PowerTodoistCard: entity is required");
+    this.config = {
+      show_header: !0,
+      show_completed: 5,
+      show_item_add: !0,
+      show_item_description: !0,
+      show_item_labels: !0,
+      ...e
+    };
+  }
+  getCardSize() {
+    var e;
+    return !this.hass || !((e = this.config) != null && e.entity) ? 1 : Ne(this.hass.states[this.config.entity]).length || 1;
+  }
+  static getConfigElement() {
+    return document.createElement("powertodoist-card-editor");
+  }
+  static getStubConfig() {
+    return { entity: "" };
+  }
+  render() {
+    let e;
+    try {
+      e = this.computeContext();
+    } catch (s) {
+      const r = s instanceof Error ? s.message : String(s);
+      return h`<ha-card><div class="card error">${r}</div></ha-card>`;
+    }
+    const t = this.hasTodoistSensorData(e.entity);
+    return h`
+      <ha-card
+        class=${this.getCardClass(e)}
+        style=${this.getCardStyle(e)}
+      >
+        ${e.config.style ? h`<style>${e.config.style}</style>` : p}
+        <div
+          class="card"
+        >
+          ${t ? this.renderHeader(e) : p}
+          ${t && e.config.markdown_top_content ? h`<div class="top-markdown">${Ie(this.renderMarkdownText(e.config.markdown_top_content))}</div>` : p}
 
+          <div class="list">
+            ${t ? e.tasks.length ? e.tasks.map((s) => this.renderTask(s, e)) : h`<div class="empty">${this.getEmptyMessage(e)}</div>` : h`<div class="empty">${this.getEmptyMessage(e)}</div>`}
+          </div>
+
+          ${t ? this.renderCompletedTasks(e) : p}
+          ${t ? this.renderAddTaskInput(e) : p}
+
+          ${t && e.config.markdown_bottom_content ? h`<div class="bottom-markdown">${Ie(this.renderMarkdownText(e.config.markdown_bottom_content))}</div>` : p}
+        </div>
+        ${this.toast ? h`<div class=${`toast ${this.toast.tone}`}>${this.toast.message}</div>` : p}
+      </ha-card>
+    `;
+  }
+  computeContext() {
+    var d, m;
+    if (!this.config) throw new Error("PowerTodoistCard: config is not set");
+    const e = Ht(this.config, this.hass), t = (m = (d = this.hass) == null ? void 0 : d.states) == null ? void 0 : m[e.entity];
+    if (!t)
+      return {
+        config: e,
+        title: this.getFallbackTitle(e),
+        tasks: [],
+        taskDepths: /* @__PURE__ */ new Map(),
+        cardLabels: [],
+        labelColors: /* @__PURE__ */ new Map(),
+        rawLabelColors: []
+      };
+    const s = gi(e, t), r = this.getCurrentTasks(t), n = Bt(r, e), o = _i(n, e, s), a = bi(e, o), l = hi(o, e), c = Si(o), u = this.getRawLabelColors();
+    return {
+      config: e,
+      entity: t,
+      title: this.getDisplayTitle(e, t, s, this.config),
+      tasks: l,
+      taskDepths: c,
+      cardLabels: a,
+      labelColors: this.getLabelColorMap(u),
+      rawLabelColors: u
+    };
+  }
+  renderHeader(e) {
+    return e.config.show_header === !1 ? p : h`
+      <h1 class="title">
+        <span>${e.title}</span>
+        ${this.renderCardLabels(e)}
+      </h1>
+    `;
+  }
+  renderCardLabels(e) {
+    const t = e.config.show_card_labels === !1 || e.cardLabels.length !== 1 ? [] : e.cardLabels;
+    return t.length ? h`
+      <span class="title-labels">
+        ${t.map((s) => this.renderStaticLabel(s, e))}
+      </span>
+    ` : p;
+  }
+  renderTask(e, t) {
+    const s = this.getVisibleLabels(e, t);
+    return h`
+      <div class=${this.getTaskClass(e, s)} style=${this.getTaskStyle(e, t)}>
+        ${this.renderCloseControl(e, t)}
+        <div class="content">
+          <span
+            class="name action-target"
+            @pointerdown=${() => this.startPress(e, t, "longpress_content")}
+            @pointerup=${() => this.endPress(e, t, "content", "dbl_content")}
+            @pointercancel=${() => this.cancelPress()}
+            @pointerleave=${() => this.cancelPress()}
+          >${e.content}</span>
+          ${t.config.show_item_description === !1 || !e.description ? p : h`<span
+                class="description action-target"
+                @pointerdown=${() => this.startPress(e, t, "longpress_description")}
+                @pointerup=${() => this.endPress(e, t, "description", "dbl_description")}
+                @pointercancel=${() => this.cancelPress()}
+                @pointerleave=${() => this.cancelPress()}
+              >${e.description}</span>`}
+          ${!this.shouldRenderLabels(t) || !s.length ? p : h`<div class="labels">${s.map((r) => this.renderLabel(r, e, t))}</div>`}
+        </div>
+        ${t.config.show_item_delete === !1 ? p : h`
+              <button
+                class="icon-button delete-button"
+                type="button"
+                title="Delete task"
+                @pointerdown=${() => this.startPress(e, t, "longpress_delete")}
+                @pointerup=${() => this.endPress(e, t, "delete", "dbl_delete")}
+                @pointercancel=${() => this.cancelPress()}
+                @pointerleave=${() => this.cancelPress()}
+              >
+                ${this.renderConfiguredIcon(t, 3)}
+              </button>
+            `}
+      </div>
+    `;
+  }
+  renderCompletedTasks(e) {
+    return !e.entity || !e.config.show_completed || !this.itemsJustCompleted.length ? p : h`
+      <div class="completed-list">
+        ${this.itemsJustCompleted.map((t) => this.renderCompletedTask(t, e))}
+      </div>
+    `;
+  }
+  renderCompletedTask(e, t) {
+    const s = this.pendingTaskIds.has(e.id), r = s ? h`<span class="spinner" aria-label="Saving"></span>` : this.renderConfiguredIcon(t, 2), n = s ? h`<span class="spinner" aria-label="Saving"></span>` : this.renderConfiguredIcon(t, 3);
+    return h`
+      <div class=${this.getTaskClass(e, [], "completed-task")} style=${this.getTaskStyle(e, t)}>
+        ${t.config.show_item_close === !1 ? h`<span class="icon-button">${this.renderConfiguredIcon(t, 0)}</span>` : h`
+              <button
+                class="icon-button"
+                type="button"
+                title="Uncomplete task"
+                @pointerdown=${() => this.startPress(e, t, "longpress_uncomplete")}
+                @pointerup=${() => this.endPress(e, t, "uncomplete", "dbl_uncomplete")}
+                @pointercancel=${() => this.cancelPress()}
+                @pointerleave=${() => this.cancelPress()}
+              >
+                ${r}
+              </button>
+            `}
+        <div class="content">
+          <span class="name">${e.content}</span>
+          ${t.config.show_item_description === !1 || !e.description ? p : h`<span class="description">${e.description}</span>`}
+        </div>
+        ${t.config.show_item_delete === !1 ? p : h`
+              <button
+                class="icon-button delete-button"
+                type="button"
+                title="Remove from completed list"
+                @pointerdown=${() => this.startPress(e, t, "longpress_unlist_completed")}
+                @pointerup=${() => this.endPress(e, t, "unlist_completed", "dbl_unlist_completed")}
+                @pointercancel=${() => this.cancelPress()}
+                @pointerleave=${() => this.cancelPress()}
+              >
+                ${n}
+              </button>
+            `}
+      </div>
+    `;
+  }
+  renderAddTaskInput(e) {
+    return !e.entity || !this.hasTodoistSensorData(e.entity) || e.config.show_item_add === !1 ? p : h`
+      <input
+        id="powertodoist-card-item-add"
+        class="add-task-input"
+        type="text"
+        placeholder="New item..."
+        enterkeyhint="enter"
+        @keyup=${(t) => this.handleAddTaskKeyup(t, e)}
+      />
+    `;
+  }
+  renderCloseControl(e, t) {
+    const s = this.pendingTaskIds.has(e.id) ? h`<span class="spinner" aria-label="Saving"></span>` : this.renderTaskIcon(e, t);
+    return t.config.show_item_close === !1 ? h`<span class="icon-button">${s}</span>` : h`
+      <button
+        class="icon-button"
+        type="button"
+        title="Toggle task"
+        @pointerdown=${() => this.startPress(e, t, "longpress_close")}
+        @pointerup=${() => this.endPress(e, t, "close", "dbl_close")}
+        @pointercancel=${() => this.cancelPress()}
+        @pointerleave=${() => this.cancelPress()}
+      >
+        ${s}
+      </button>
+    `;
+  }
+  renderLabel(e, t, s) {
+    var c;
+    const r = e.endsWith("_outline"), n = ti(e), o = e.replace(/_outline$/, ""), a = ((c = o.split(":")[0]) == null ? void 0 : c.trim()) ?? o, l = n ? "var(--primary-background-color)" : s.labelColors.get(o) ?? s.labelColors.get(a) ?? q("green");
+    return h`
+      <span
+        class=${[
+      r ? "label" : "label label-fill",
+      n ? "date-label" : ""
+    ].filter(Boolean).join(" ")}
+        style=${`--pt-label-color: ${l}`}
+        @pointerdown=${() => this.startPress(t, s, "longpress_label")}
+        @pointerup=${() => this.endPress(t, s, "label", "dbl_label")}
+        @pointercancel=${() => this.cancelPress()}
+        @pointerleave=${() => this.cancelPress()}
+      >
+        ${o}
+      </span>
+    `;
+  }
+  renderStaticLabel(e, t) {
+    const s = e.endsWith("_outline"), r = e.replace(/_outline$/, ""), n = t.labelColors.get(e) ?? t.labelColors.get(r) ?? q("green");
+    return h`
+      <span
+        class=${s ? "label" : "label label-fill"}
+        style=${`--pt-label-color: ${n}`}
+      >
+        ${r}
+      </span>
+    `;
+  }
+  getVisibleLabels(e, t) {
+    return mi(e, t.config, t.cardLabels, t.rawLabelColors);
+  }
+  shouldRenderLabels(e) {
+    var t;
+    return e.config.show_item_labels !== !1 || !!((t = e.config.extra_labels) != null && t.length);
+  }
+  renderTaskIcon(e, t) {
+    const s = vi(e, t.config);
+    return this.renderIcon(s);
+  }
+  renderConfiguredIcon(e, t) {
+    return this.renderIcon(Ti(e.config, t));
+  }
+  renderIcon(e) {
+    return h`
+      <ha-icon
+        class="icon"
+        icon=${`mdi:${e.name}`}
+        style=${e.color ? `color: ${e.color}` : ""}
+      ></ha-icon>
+    `;
+  }
+  getTaskClass(e, t = [], s = "") {
+    return [
+      "task",
+      s,
+      ge(e) ? "subtask" : "",
+      e.description || t.length ? "has-detail" : "",
+      e.statusFromLabelCriteria ? "done" : "",
+      this.pendingTaskIds.has(e.id) ? "pending" : "",
+      this.emphasizedTaskIds.has(e.id) ? "emphasis" : ""
+    ].filter(Boolean).join(" ");
+  }
+  getTaskStyle(e, t) {
+    return `--pt-task-depth: ${Ei(e, t.taskDepths)};`;
+  }
+  getCardClass(e) {
+    return $i(e.config);
+  }
+  getCardStyle(e) {
+    return wi(e.config);
+  }
+  getEmptyMessage(e) {
+    return this.hasTodoistSensorData(e.entity) ? "No uncompleted tasks!" : "Powertodoist sensors don't have any data yet. Please wait a few seconds and refresh. [todoist sensor]";
+  }
+  hasTodoistSensorData(e) {
+    const t = (e == null ? void 0 : e.attributes) ?? {};
+    return [
+      "project",
+      "tasks",
+      "items",
+      "sections",
+      "project_sections",
+      "results",
+      "result",
+      "data"
+    ].some((s) => s in t);
+  }
+  getRawLabelColors() {
+    try {
+      return Lt(this.hass).filter((e) => {
+        if (!e || typeof e != "object") return !1;
+        const t = e;
+        return typeof t.name == "string" && typeof t.color == "string";
+      });
+    } catch {
+      return [];
+    }
+  }
+  getLabelColorMap(e) {
+    const t = /* @__PURE__ */ new Map();
+    return e.forEach((s) => {
+      const r = fe(s.color) ? q(s.color) : void 0;
+      r && t.set(s.name, r);
+    }), t;
+  }
+  renderMarkdownText(e) {
+    return ni(e, this.hass);
+  }
+  getDisplayTitle(e, t, s, r) {
+    const n = yi(e, t, s);
+    return e.show_relative_day ? Qt(n, this.hass, {
+      entityId: e.relative_day_entity,
+      sourceToken: r.filter_section
+    }) : n;
+  }
+  getFallbackTitle(e) {
+    return e.name || e.friendly_name || e.filter_section || "ToDoist";
+  }
+  getCurrentTasks(e) {
+    return this.optimisticTasks ?? Ne(e);
+  }
+  startPress(e, t, s) {
+    this.longPressTimer = window.setTimeout(() => {
+      this.longPressTimer = void 0, this.clickCount = 0, this.clickTimer && window.clearTimeout(this.clickTimer), this.clickTimer = void 0, this.executeTaskAction(e, t, s);
+    }, this.longPressMs);
+  }
+  endPress(e, t, s, r = "") {
+    if (this.longPressTimer) {
+      if (window.clearTimeout(this.longPressTimer), this.longPressTimer = void 0, this.clickCount += 1, this.clickCount === 1) {
+        if (!r) {
+          this.clickCount = 0, this.executeTaskAction(e, t, s);
+          return;
+        }
+        this.clickTimer = window.setTimeout(() => {
+          this.clickCount = 0, this.clickTimer = void 0, this.executeTaskAction(e, t, s);
+        }, this.clickDelayMs);
+        return;
+      }
+      this.clickCount === 2 && (this.clickTimer && window.clearTimeout(this.clickTimer), this.clickTimer = void 0, this.clickCount = 0, this.executeTaskAction(e, t, r));
+    }
+  }
+  cancelPress() {
+    this.longPressTimer && (window.clearTimeout(this.longPressTimer), this.longPressTimer = void 0);
+  }
+  async executeTaskAction(e, t, s, r = !1) {
+    var c, u;
+    if (!t.entity) return;
+    if (s.endsWith("unlist_completed")) {
+      if (!r && this.pendingTaskIds.has(e.id)) return;
+      const d = [...this.itemsJustCompleted];
+      this.pendingTaskIds.add(e.id), this.removeCompletedTask(e), this.requestUpdate();
+      try {
+        await ((c = this.hass) == null ? void 0 : c.callService("homeassistant", "update_entity", {
+          entity_id: t.config.entity
+        }));
+      } catch (m) {
+        this.itemsJustCompleted = d, this.showToast("Could not save. Reverted.", "error"), console.warn("[PowerTodoist] completed-list action failed, reverted optimistic update", m);
+      } finally {
+        this.pendingTaskIds.delete(e.id), this.requestUpdate();
+      }
+      return;
+    }
+    const n = this.getCurrentTasks(t.entity), o = [...this.itemsJustCompleted], a = Mi(e, t.config, this.hass, `actions_${s}`, {
+      prompt: (d, m) => window.prompt(d, m)
+    });
+    if ((a.commands.length || a.adds.length || a.followUpActions.length || a.service || (u = a.emphasis) != null && u.length) && !(!r && this.pendingTaskIds.has(e.id)) && !(a.confirm && !window.confirm(a.confirm))) {
+      this.pendingTaskIds.add(e.id), this.applyEmphasis(e, a.emphasis), this.applyOptimisticAction(e, n, a, t.config), this.requestUpdate();
+      try {
+        a.commands.length && await Ze(this.hass, a.commands, t.config.entity), await Wi(this.hass, a.adds), await qi(this.hass, a.service, t.config.entity);
+        const d = this.getOptimisticTaskById(e.id) ?? a.optimisticTask ?? e;
+        await Promise.all(a.followUpActions.map(
+          (m) => this.executeTaskAction(d, t, m, !0)
+        )), (a.toast || a.commands.length || a.adds.length || a.service) && this.showToast(a.toast || "Saved", "success");
+      } catch (d) {
+        this.optimisticTasks = n, this.itemsJustCompleted = o, this.showToast("Could not save. Reverted.", "error"), console.warn("[PowerTodoist] Todoist action failed, reverted optimistic update", d);
+      } finally {
+        this.pendingTaskIds.delete(e.id), this.requestUpdate();
+      }
+    }
+  }
+  async handleAddTaskKeyup(e, t) {
+    if (e.key !== "Enter" && e.which !== 13 || !t.entity) return;
+    const s = e.currentTarget, r = (s == null ? void 0 : s.value) ?? "";
+    if (!(r.length <= 1))
+      try {
+        t.config.use_quick_add ? await Ji(
+          this.hass,
+          this.buildQuickAddText(r, t, t.entity),
+          t.config.entity
+        ) : await Ze(
+          this.hass,
+          [this.buildItemAddCommand(r, t.entity)],
+          t.config.entity
+        ), s && (s.value = ""), this.showToast("Saved", "success");
+      } catch (n) {
+        this.showToast("Could not save.", "error"), console.warn("[PowerTodoist] Todoist add task failed", n);
+      }
+  }
+  buildItemAddCommand(e, t) {
+    const s = this.getUUID();
+    return {
+      type: g.ITEM_ADD,
+      temp_id: s,
+      uuid: s,
+      args: {
+        project_id: t.state,
+        content: e
+      }
+    };
+  }
+  buildQuickAddText(e, t, s) {
+    let r = e;
+    const n = t.config.filter_section, o = this.getProjectName(s);
+    return n && !r.includes(" /") && (r += ` /${this.escapeQuickAddToken(n)}`), o && !r.includes(" #") && (r += ` #${this.escapeQuickAddToken(o)}`), r;
+  }
+  getProjectName(e) {
+    var s;
+    const t = (s = e.attributes) == null ? void 0 : s.project;
+    return t && typeof t == "object" && "name" in t ? String(t.name ?? "") : void 0;
+  }
+  escapeQuickAddToken(e) {
+    return e.replaceAll(" ", "\\ ");
+  }
+  getUUID() {
+    const e = /* @__PURE__ */ new Date();
+    return `${Math.floor(Math.random() * 99 + 1)}-${Number(e)}-${e.getMilliseconds()}`;
+  }
+  applyEmphasis(e, t) {
+    t != null && t.length && (this.emphasizedTaskIds.add(e.id), this.requestUpdate(), window.setTimeout(() => {
+      this.emphasizedTaskIds.delete(e.id), this.requestUpdate();
+    }, 3e3));
+  }
+  applyCommandSideEffects(e, t, s, r) {
+    const n = s.map((o) => o.type);
+    return n.includes(g.ITEM_COMPLETE) ? (this.rememberCompletedTask(e, r.show_completed ?? 5), t.filter((o) => o.id !== e.id)) : n.includes(g.ITEM_UNCOMPLETE) ? (this.removeCompletedTask(e), this.upsertTask(t, {
+      ...e,
+      checked: !1,
+      completed_at: null
+    })) : n.includes(g.ITEM_DELETE) ? (this.removeCompletedTask(e), t.filter((o) => o.id !== e.id)) : t;
+  }
+  applyOptimisticAction(e, t, s, r) {
+    let n = t;
+    const o = s.optimisticTask ?? e;
+    s.optimisticTask && (n = this.upsertTask(n, s.optimisticTask)), s.commands.length && (n = this.applyCommandSideEffects(o, n, s.commands, r)), n !== t && (this.optimisticTasks = n);
+  }
+  getOptimisticTaskById(e) {
+    var t;
+    return (t = this.optimisticTasks) == null ? void 0 : t.find((s) => s.id === e);
+  }
+  rememberCompletedTask(e, t) {
+    if (t <= 0) return;
+    const s = this.itemsJustCompleted.filter((r) => r.id !== e.id);
+    this.itemsJustCompleted = [...s, e].slice(-t);
+  }
+  removeCompletedTask(e) {
+    this.itemsJustCompleted = this.itemsJustCompleted.filter((t) => t.id !== e.id);
+  }
+  upsertTask(e, t) {
+    return e.some((s) => s.id === t.id) ? e.map((s) => s.id === t.id ? t : s) : [...e, t];
+  }
+  showToast(e, t) {
+    this.toastTimeout && window.clearTimeout(this.toastTimeout), this.toast = { message: e, tone: t }, this.requestUpdate(), this.toastTimeout = window.setTimeout(() => {
+      this.toast = void 0, this.requestUpdate();
+    }, t === "error" ? 4500 : 2200);
+  }
+};
+K.properties = {
+  hass: { attribute: !1 },
+  config: { state: !0 }
+}, K.styles = ht`
+    ha-card {
+      overflow: hidden;
+    }
+
+    ha-card.left-accent {
+      border-left: 6px solid var(--pt-accent-color);
+      padding-left: 0;
+      margin-left: 0;
+    }
+
+    .card {
+      padding: 22px 28px 18px;
+    }
+
+    .top-markdown,
+    .bottom-markdown {
+      margin: -6px 0 16px;
+      color: var(--secondary-text-color);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .bottom-markdown {
+      margin: 18px 0 0;
+    }
+
+    .title {
+      margin: 0 0 22px;
+      font-size: var(--pt-title-font-size, 24px);
+      font-weight: 500;
+      line-height: 1.2;
+      color: var(--primary-text-color);
+    }
+
+    .title-labels {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--pt-row-gap, 12px);
+    }
+
+    .completed-list {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--divider-color);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .add-task-input {
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 18px;
+      padding: 10px 0;
+      border: 0;
+      border-bottom: 1px solid var(--divider-color);
+      outline: 0;
+      background: transparent;
+      color: var(--primary-text-color);
+      font: inherit;
+      font-size: var(--pt-item-font-size, 16px);
+    }
+
+    .add-task-input::placeholder {
+      color: var(--secondary-text-color);
+      opacity: 0.8;
+    }
+
+    .add-task-input:focus {
+      border-bottom-color: var(--primary-color, #149514);
+    }
+
+    .task {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) auto;
+      align-items: start;
+      column-gap: 12px;
+      min-height: calc(var(--pt-item-line-size, 40px) + var(--pt-line-padding-top, 0px) + var(--pt-line-padding-bottom, 0px));
+      padding-top: var(--pt-line-padding-top, 0px);
+      padding-bottom: var(--pt-line-padding-bottom, 0px);
+      margin-left: calc(var(--pt-subtask-indent, 28px) * var(--pt-task-depth, 0));
+      box-sizing: border-box;
+    }
+
+    .task.has-detail {
+      padding-bottom: max(var(--pt-line-padding-bottom, 0px), 4px);
+    }
+
+    .task.done .icon {
+      color: var(--pt-complete-icon-color, #149514);
+    }
+
+    .icon-button {
+      width: var(--pt-icon-size, 24px);
+      height: var(--pt-icon-size, 24px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-top: 1px;
+      cursor: pointer;
+      border: 0;
+      background: transparent;
+      color: var(--pt-incomplete-icon-color, #149514);
+      margin: 0;
+      padding-left: 0;
+      padding-right: 0;
+    }
+
+    .icon {
+      width: var(--pt-icon-size, 24px);
+      height: var(--pt-icon-size, 24px);
+    }
+
+    .task.pending {
+      opacity: 0.68;
+    }
+
+    .task.pending .icon-button {
+      color: var(--secondary-text-color);
+    }
+
+    .completed-task {
+      opacity: 0.64;
+    }
+
+    .completed-task .name {
+      text-decoration: line-through;
+    }
+
+    .completed-task .icon-button {
+      color: var(--pt-uncomplete-icon-color, var(--secondary-text-color));
+    }
+
+    .task.emphasis {
+      animation: pt-emphasis 0.65s ease-in-out 0s 2;
+    }
+
+    @keyframes pt-emphasis {
+      50% {
+        background: color-mix(in srgb, var(--primary-color, #149514) 14%, transparent);
+      }
+    }
+
+    .spinner {
+      width: calc(var(--pt-icon-size, 24px) - 6px);
+      height: calc(var(--pt-icon-size, 24px) - 6px);
+      border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: pt-spin 0.75s linear infinite;
+    }
+
+    @keyframes pt-spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .content {
+      min-width: 0;
+    }
+
+    .action-target {
+      cursor: pointer;
+    }
+
+    .name {
+      display: block;
+      font-size: var(--pt-item-font-size, 16px);
+      line-height: 1.25;
+      color: var(--primary-text-color);
+      white-space: normal;
+      word-break: break-word;
+      overflow-wrap: break-word;
+    }
+
+    .description {
+      display: inline-block;
+      margin-top: 3px;
+      font-size: 0.86em;
+      line-height: 1.25;
+      color: var(--secondary-text-color);
+      white-space: normal;
+      word-break: break-word;
+      overflow-wrap: break-word;
+    }
+
+    .labels {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 5px;
+    }
+
+    .label {
+      display: inline-flex;
+      align-items: center;
+      min-height: 16px;
+      padding: 1px 5px;
+      border: 1px solid currentColor;
+      border-radius: 3px;
+      font-size: 11px;
+      line-height: 1.2;
+      color: var(--pt-label-color, #149514);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .delete-button {
+      color: var(--pt-delete-icon-color, #db4437);
+    }
+
+    .label-fill {
+      color: white;
+      background: var(--pt-label-color, #149514);
+      border-color: var(--pt-label-color, #149514);
+    }
+
+    .date-label {
+      color: var(--primary-text-color);
+    }
+
+    .empty,
+    .error {
+      color: var(--secondary-text-color);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .error {
+      color: var(--error-color, #db4437);
+    }
+
+    .toast {
+      position: absolute;
+      right: 16px;
+      bottom: 14px;
+      max-width: calc(100% - 32px);
+      padding: 8px 11px;
+      border-radius: 6px;
+      background: var(--card-background-color, white);
+      border: 1px solid var(--divider-color);
+      color: var(--primary-text-color);
+      box-shadow: var(--ha-card-box-shadow, 0 2px 8px rgb(0 0 0 / 18%));
+      font-size: 13px;
+      line-height: 1.25;
+      z-index: 1;
+    }
+
+    .toast.success {
+      border-color: color-mix(in srgb, #149514 55%, var(--divider-color));
+    }
+
+    .toast.error {
+      border-color: var(--error-color, #db4437);
+      color: var(--error-color, #db4437);
+    }
+  `;
+let ce = K;
+const Vi = Array.from({ length: 16 }, (i, e) => ({
+  value: e,
+  label: String(e)
+})), Qe = [
+  { value: "ascending", label: "Ascending" },
+  { value: "descending", label: "Descending" }
+], Zi = [
+  { name: "entity", label: "Entity (required)", required: !0, selector: { entity: { domain: "sensor" } } },
+  { name: "comments_entity", label: "Comments entity", selector: { entity: { domain: "sensor" } } },
+  { name: "name", label: "Name", selector: { text: {} } },
+  { name: "friendly_name", label: "Friendly name", selector: { text: {} } },
+  { name: "show_header", label: "Show header", selector: { boolean: {} } },
+  {
+    name: "show_completed",
+    label: "Completed tasks shown at bottom",
+    selector: { select: { options: Vi, mode: "dropdown" } }
+  },
+  { name: "show_item_add", label: "Show add-task input", selector: { boolean: {} } },
+  { name: "use_quick_add", label: "Use Todoist Quick Add", selector: { boolean: {} } },
+  { name: "show_item_close", label: "Show complete/uncomplete buttons", selector: { boolean: {} } },
+  { name: "show_item_delete", label: "Show delete buttons", selector: { boolean: {} } },
+  { name: "show_item_description", label: "Show item descriptions", selector: { boolean: {} } },
+  { name: "show_item_labels", label: "Show item labels", selector: { boolean: {} } },
+  { name: "show_card_labels", label: "Show card labels", selector: { boolean: {} } },
+  { name: "filter_section", label: "Filter section", selector: { text: {} } },
+  { name: "filter_section_id", label: "Filter section id", selector: { text: {} } },
+  { name: "filter_labels", label: "Filter labels", selector: { object: {} } },
+  { name: "filter_show_dates_starting", label: "Date filter start", selector: { text: {} } },
+  { name: "filter_show_dates_ending", label: "Date filter end", selector: { text: {} } },
+  { name: "filter_show_dates_empty", label: "Show tasks without due date", selector: { boolean: {} } },
+  { name: "sort_by_due_date", label: "Sort by due date", selector: { select: { options: Qe } } },
+  { name: "sort_by_priority", label: "Sort by priority", selector: { select: { options: Qe } } },
+  { name: "show_dates", label: "Show due dates", selector: { boolean: {} } },
+  { name: "date_format", label: "Date format", selector: { text: {} } },
+  { name: "show_relative_day", label: "Show relative day title", selector: { boolean: {} } },
+  { name: "relative_day_entity", label: "Relative day entity", selector: { entity: { domain: "sensor" } } },
+  { name: "extra_labels", label: "Extra labels", selector: { object: {} } },
+  { name: "status_from_labels", label: "Status from labels", selector: { object: {} } },
+  { name: "icons", label: "Icons", selector: { object: {} } },
+  { name: "markdown_top_content", label: "Top markdown", selector: { text: { multiline: !0 } } },
+  { name: "markdown_bottom_content", label: "Bottom markdown", selector: { text: { multiline: !0 } } },
+  { name: "accent", label: "Accent color", selector: { text: {} } },
+  { name: "style", label: "Custom CSS", selector: { text: { multiline: !0 } } },
+  { name: "line_size", label: "Line size", selector: { number: { min: 16, max: 120, mode: "box" } } },
+  { name: "font_size", label: "Font size", selector: { number: { min: 8, max: 48, mode: "box" } } },
+  { name: "icon_size", label: "Icon size", selector: { number: { min: 8, max: 64, mode: "box" } } },
+  { name: "line_padding_top", label: "Line padding top", selector: { number: { min: 0, max: 48, mode: "box" } } },
+  { name: "line_padding_bottom", label: "Line padding bottom", selector: { number: { min: 0, max: 48, mode: "box" } } },
+  { name: "actions_close", label: "Actions: close", selector: { object: {} } },
+  { name: "actions_dbl_close", label: "Actions: double close", selector: { object: {} } },
+  { name: "actions_longpress_close", label: "Actions: longpress close", selector: { object: {} } },
+  { name: "actions_content", label: "Actions: content", selector: { object: {} } },
+  { name: "actions_description", label: "Actions: description", selector: { object: {} } },
+  { name: "actions_label", label: "Actions: label", selector: { object: {} } },
+  { name: "actions_delete", label: "Actions: delete", selector: { object: {} } },
+  { name: "actions_uncomplete", label: "Actions: uncomplete", selector: { object: {} } }
+], Qi = /* @__PURE__ */ new Set(["entity", "show_completed"]), be = class be extends x {
+  setConfig(e) {
+    this.config = e;
+  }
+  render() {
+    return h`
+      <ha-form
+        .hass=${this.hass}
+        .data=${this.config}
+        .schema=${Zi}
+        @value-changed=${this.handleValueChanged}
+      ></ha-form>
+    `;
+  }
+  handleValueChanged(e) {
+    this.config = Yi(e.detail.value), this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config: this.config },
+        bubbles: !0,
+        composed: !0
+      })
+    );
+  }
+};
+be.properties = {
+  hass: { attribute: !1 },
+  config: { state: !0 }
+};
+let de = be;
+function Yi(i) {
+  return Object.fromEntries(
+    Object.entries(i).filter(
+      ([e, t]) => Qi.has(e) || t !== ""
+    )
+  );
+}
+const ne = "powertodoist-card", Ye = "powertodoist-card-editor", Ge = "__powerTodoistCardRegistered";
+function Gi() {
+  customElements.get(Ye) || customElements.define(Ye, de), customElements.get(ne) || customElements.define(ne, ce), window[Ge] || (window.customCards = window.customCards || [], window.customCards.push({
+    preview: !0,
+    type: ne,
+    name: "PowerTodoist Card",
+    description: "Todoist card for Home Assistant."
+  }), window[Ge] = !0), console.info(
+    "%c POWERTODOIST-CARD ",
+    "color: white; background: #007d8f; font-weight: 700"
+  );
+}
+Gi();

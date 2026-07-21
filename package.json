@@ -1,0 +1,39 @@
+{
+  "name": "power-todoist-card",
+  "version": "2.0.0",
+  "description": "TypeScript/Lit refactor of pgorod PowerTodoist Card for Home Assistant Lovelace dashboards.",
+  "type": "module",
+  "main": "powertodoist-card.js",
+  "files": [
+    "powertodoist-card.js",
+    "hacs.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "dev": "vite",
+    "build": "vite build && node scripts/copy-build.cjs",
+    "watch": "npm run watch:ha",
+    "watch:ha": "node scripts/watch-ha.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pgorod/power-todoist-card.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/pgorod/power-todoist-card/issues"
+  },
+  "homepage": "https://github.com/pgorod/power-todoist-card#readme",
+  "dependencies": {
+    "lit": "^3.1.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.2.5"
+  }
+}
